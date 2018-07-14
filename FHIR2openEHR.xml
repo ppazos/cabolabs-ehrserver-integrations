@@ -1,0 +1,1140 @@
+<channel version="3.5.2">
+  <id>f313efd2-06c8-4097-932f-d963a43ac8e3</id>
+  <nextMetaDataId>3</nextMetaDataId>
+  <name>FHIR2openEHR</name>
+  <description></description>
+  <revision>87</revision>
+  <sourceConnector version="3.5.2">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.http.HttpReceiverProperties" version="3.5.2">
+      <pluginProperties>
+        <com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties version="3.5.2">
+  <authType>NONE</authType>
+        </com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties>
+      </pluginProperties>
+      <listenerConnectorProperties version="3.5.2">
+        <host>0.0.0.0</host>
+        <port>7894</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="3.5.2">
+        <responseVariable>None</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <resourceIds class="linked-hash-map">
+          <entry>
+            <string>Default Resource</string>
+            <string>[Default Resource]</string>
+          </entry>
+        </resourceIds>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <xmlBody>false</xmlBody>
+      <parseMultipart>true</parseMultipart>
+      <includeMetadata>false</includeMetadata>
+      <binaryMimeTypes></binaryMimeTypes>
+      <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
+      <responseContentType>text/plain</responseContentType>
+      <responseDataTypeBinary>false</responseDataTypeBinary>
+      <responseStatusCode></responseStatusCode>
+      <responseHeaders class="linked-hash-map"/>
+      <charset>UTF-8</charset>
+      <contextPath></contextPath>
+      <timeout>0</timeout>
+      <staticResources/>
+    </properties>
+    <transformer version="3.5.2">
+      <elements>
+        <com.mirth.connect.plugins.mapper.MapperStep>
+          <name>ehr_uid</name>
+          <sequenceNumber>0</sequenceNumber>
+          <variable>ehr_uid</variable>
+          <mapping>msg[&apos;subject&apos;][&apos;identifier&apos;][&apos;value&apos;]</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+          <scope>CHANNEL</scope>
+        </com.mirth.connect.plugins.mapper.MapperStep>
+        <com.mirth.connect.plugins.mapper.MapperStep>
+          <name>performer_name</name>
+          <sequenceNumber>1</sequenceNumber>
+          <variable>performer_name</variable>
+          <mapping>msg[&apos;performer&apos;][0][&apos;actor&apos;][&apos;display&apos;]</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+          <scope>CHANNEL</scope>
+        </com.mirth.connect.plugins.mapper.MapperStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map CLUSTER analytes</name>
+          <sequenceNumber>2</sequenceNumber>
+          <script>//logger.info($(&apos;ehr_uid&apos;));
+
+/*
+var xml = &lt;xml&gt;&lt;n1&gt;o&lt;/n1&gt;&lt;/xml&gt;;
+xml.insertChildAfter(xml.n1[0], &lt;n2 /&gt;); // works
+xml.insertChildAfter(xml.n1, &lt;n2&gt;p&lt;/n2&gt;); // doesnt works, needs the index [0]
+xml.n1 += &lt;n2&gt;q&lt;/n2&gt;; // works append sibling
+logger.info(xml);
+*/
+
+var get_observation = function (fhir, obs_id)
+{
+   return fhir[&apos;contained&apos;].find(function (obs) { return obs.id == obs_id });
+}
+
+// solves all NS issues!
+default xml namespace = &quot;http://schemas.openehr.org/v1&quot;;
+
+// access analyte result CLUSTER from outbound template
+var analyte_cluster = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4];
+
+// TODO: to be more generic generate the number of observations-1 that come on the inbound message
+// generates 3 more analyte structures from the one on the template
+for (var i = 1; i &lt;= 3; i++)
+{
+   // to add a sibling of the analyte, the object to call &quot;insert&quot; on
+   // should be the parent of the sibling to be added, and it&apos;s the
+   // parent of the node to add the sibling after it
+   analyte_cluster.parent().insertChildAfter(analyte_cluster, analyte_cluster.copy());
+
+}
+
+// the analyte node should have a total of 4 occurrences on the output
+
+var result_id, observation, analyte_idx = 0;
+for each (res in msg[&apos;result&apos;])
+{
+   result_id = res.reference.toString().substring(1);
+
+   observation = get_observation(msg, result_id);
+
+/*
+   logger.info(observation.code.coding[0].code.toString()); // LOINC CODE
+   logger.info(observation.code.coding[0].display.toString()); // LOINC NAME
+   logger.info(observation.code.text.toString()); // ANALYTE NAME
+   logger.info(observation.valueQuantity.value.toString()); // ANALYTE RESULT QTY VALUE
+   logger.info(observation.valueQuantity.unit.toString()); // ANALYTE RESULT QTY UNITs
+*/
+
+   // ANALYTE NAME
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;name&apos;][&apos;value&apos;] = observation.code.text.toString();
+
+   // LOINC NAME, CODE
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = observation.code.coding[0].display.toString();
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][0][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = observation.code.coding[0].code.toString();
+
+   // ANALYTE RESULT QTY VALUE, UNITS
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][1][&apos;value&apos;][&apos;magnitude&apos;] = observation.valueQuantity.value.toString();
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][1][&apos;value&apos;][&apos;units&apos;] = observation.valueQuantity.unit.toString();
+
+   // TODO: map Analyte result status timestamp (openEHR)
+   // TODO: map msg[&apos;contained&apos;][0][&apos;referenceRange&apos;] to DV_QUANTITY.normal_range
+
+   // mapping OBservationStatus FHIR values to openEHR local analyte status values
+   // https://www.hl7.org/fhir/valueset-observation-status.html
+   switch (msg[&apos;contained&apos;][analyte_idx][&apos;status&apos;].toString())
+   {
+      case &apos;final&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0018&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+      break;
+      case &apos;registered&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0015&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Registered&apos;;
+      break;
+      case &apos;preliminary&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0017&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Preliminary&apos;;
+      break;
+      case &apos;cancelled&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0023&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Cancelled&apos;;
+      break;
+      case &apos;amended&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0020&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Amended&apos;;
+      break;
+      case &apos;corrected&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0019&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Corrected&apos;;
+      break;
+      default:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0018&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+   }
+
+   analyte_idx++;
+}
+
+// TODO: map analyte result status with the correct openEHR code from archetype to FINAL
+// TODO: change header values for commit (UUIDs, Dates, etc.)</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map OBSERVATION result</name>
+          <sequenceNumber>3</sequenceNumber>
+          <script>// mapping DiagnosticReportStatus FHIR values to openEHR local analyte status values
+// https://www.hl7.org/fhir/valueset-diagnostic-report-status.html
+
+// Observation time
+// https://searchcode.com/codesearch/view/93413572/
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;] = DateUtil.convertDate(&quot;yyyy-MM-dd&apos;T&apos;HH:mm:ssX&quot;, &quot;yyyyMMdd&apos;T&apos;HHmmssZ&quot;, msg[&apos;effectiveDateTime&apos;]);
+
+// Event time (same as observation)
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
+
+// Panel name and code
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = msg[&apos;code&apos;][&apos;coding&apos;][0][&apos;display&apos;];
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = msg[&apos;code&apos;][&apos;coding&apos;][0][&apos;code&apos;];
+
+// Result status
+   switch (msg[&apos;status&apos;].toString())
+   {
+      case &apos;final&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0038&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+      break;
+      case &apos;registered&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0107&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Registered&apos;;
+      break;
+      case &apos;preliminary&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0120&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Preliminary&apos;;
+      break;
+      case &apos;cancelled&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0074&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Cancelled&apos;;
+      break;
+      case &apos;amended&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0040&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Amended&apos;;
+      break;
+      case &apos;corrected&apos;:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0115&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Corrected&apos;;
+      break;
+      default:
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0038&apos;;
+         tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+   }
+
+// Test status timestamp = OBSERVATION time
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
+
+// Category (free text, we can code it but need to change the archetype)
+// FHIR codes come from https://hl7.org/fhir/2018Jan/v2/0074/index.html
+// We use the code for now, a better approach would be to get the name associated with the code from the CodeSystem Resource from a FHIR server
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][3][&apos;value&apos;][&apos;value&apos;] = msg[&apos;category&apos;][&apos;coding&apos;][0][&apos;code&apos;];
+
+// Test id on protocol
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;protocol&apos;][&apos;items&apos;][&apos;value&apos;][&apos;type&apos;] = msg[&apos;identifier&apos;][0][&apos;system&apos;];
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;protocol&apos;][&apos;items&apos;][&apos;value&apos;][&apos;id&apos;] = msg[&apos;identifier&apos;][0][&apos;value&apos;];</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map COMPOSITION document</name>
+          <sequenceNumber>4</sequenceNumber>
+          <script>// Context start time, same as OBSERVATION time mapped before
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;start_time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;]
+
+// Other context report ID (is free text!)
+// nowhere to put the type/system = msg[&apos;identifier&apos;][0][&apos;system&apos;];
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;other_context&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = msg[&apos;identifier&apos;][0][&apos;value&apos;];
+
+// Other context status, same as the ELEMENT status for the whole panel mapped before
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;other_context&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;];
+
+// Composer
+
+var entity_id = msg[&apos;performer&apos;][0][&apos;actor&apos;][&apos;reference&apos;].split(&apos;/&apos;); // Organization/id =&gt; [Organization, id]
+
+logger.info(entity_id);
+
+// TODO: type would depend on the Resource referenced from performer.actor.reference, if it&apos;s Organization/234... then the type here is ORGANIZATION
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;external_ref&apos;][&apos;type&apos;] = &apos;ORGANIZATION&apos;;
+
+// ID of performer
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;external_ref&apos;][&apos;id&apos;][&apos;value&apos;] = entity_id[1];
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;name&apos;] = msg[&apos;performer&apos;][0][&apos;actor&apos;][&apos;display&apos;];</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Set VERSION values</name>
+          <sequenceNumber>5</sequenceNumber>
+          <script>// Version UID
+tmp[&apos;version&apos;][&apos;uid&apos;][&apos;value&apos;] = UUIDGenerator.getUUID() + &apos;::FHIR_SOURCE::1&apos;;
+
+// Time committed
+// https://searchcode.com/codesearch/view/93413572/
+tmp[&apos;version&apos;][&apos;commit_audit&apos;][&apos;time_committed&apos;][&apos;value&apos;] = DateUtil.getCurrentDate(&quot;yyyyMMdd&apos;T&apos;HHmmssZ&quot;);
+
+// Committer = performer
+
+var entity_id = msg[&apos;performer&apos;][0][&apos;actor&apos;][&apos;reference&apos;].split(&apos;/&apos;); // Organization/id =&gt; [Organization, id]
+
+// TODO: type would depend on the Resource referenced from performer.actor.reference, if it&apos;s Organization/234... then the type here is ORGANIZATION
+tmp[&apos;version&apos;][&apos;commit_audit&apos;][&apos;committer&apos;][&apos;external_ref&apos;][&apos;type&apos;] = &apos;ORGANIZATION&apos;;
+
+tmp[&apos;version&apos;][&apos;commit_audit&apos;][&apos;committer&apos;][&apos;name&apos;] = msg[&apos;performer&apos;][0][&apos;actor&apos;][&apos;display&apos;];
+
+tmp[&apos;version&apos;][&apos;commit_audit&apos;][&apos;committer&apos;][&apos;external_ref&apos;][&apos;id&apos;][&apos;value&apos;] = entity_id[1];
+
+// Contribution
+tmp[&apos;version&apos;][&apos;contribution&apos;][&apos;id&apos;][&apos;value&apos;] = UUIDGenerator.getUUID();</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+      </elements>
+      <inboundTemplate encoding="base64">ewogICJyZXNvdXJjZVR5cGUiOiAiRGlhZ25vc3RpY1JlcG9ydCIsCiAgImlkIjogImxpcGlkcyIs
+CiAgInRleHQiOiB7CiAgICAic3RhdHVzIjogImdlbmVyYXRlZCIsCiAgICAiZGl2IjogIjxkaXYg
+eG1sbnM9XCJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hodG1sXCI+XG5cblxuICAgICAgPGgzPkxp
+cGlkIFJlcG9ydCBmb3IgV2lsZS4gRS4gQ09ZT1RFIChNUk46IDIzNDUzKSBpc3N1ZWQgMy1NYXIg
+MjAwOSAxNDoyNjwvaDM+XG5cblxuICAgICAgPHByZT5cblRlc3QgICAgICAgICAgICAgICAgICBV
+bml0cyAgICAgICBWYWx1ZSAgICAgICBSZWZlcmVuY2UgUmFuZ2VcbkNob2xlc3Rlcm9sICAgICAg
+ICAgICBtbW9sL0wgICAgICA2LjMgICAgICAgICAmbHQ7NC41XG5UcmlnbHljZXJpZGUgICAgICAg
+ICAgbW1vbC9MICAgICAgMS4zICAgICAgICAgJmx0OzIuMFxuSERMIENob2xlc3Rlcm9sICAgICAg
+IG1tb2wvTCAgICAgIDEuMyAgICAgICAgICZndDsxLjVcbkxETCBDaG9sLiAoY2FsYykgICAgICBt
+bW9sL0wgICAgICA0LjIgICAgICAgICAmbHQ7My4wXG4gICAgICA8L3ByZT5cblxuXG4gICAgICA8
+cD5BY21lIExhYm9yYXRvcnksIEluYyBzaWduZWQ6IERyIFBldGUgUGF0aG9sb2dpc3Q8L3A+XG5c
+blxuICAgIDwvZGl2PiIKICB9LAogICJjb250YWluZWQiOiBbCiAgICB7CiAgICAgICJyZXNvdXJj
+ZVR5cGUiOiAiT2JzZXJ2YXRpb24iLAogICAgICAiaWQiOiAiY2hvbGVzdGVyb2wiLAogICAgICAi
+c3RhdHVzIjogImZpbmFsIiwKICAgICAgImNvZGUiOiB7CiAgICAgICAgImNvZGluZyI6IFsKICAg
+ICAgICAgIHsKICAgICAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vbG9pbmMub3JnIiwKICAgICAg
+ICAgICAgImNvZGUiOiAiMTQ2NDctMiIsCiAgICAgICAgICAgICJkaXNwbGF5IjogIkNob2xlc3Rl
+cm9sIFtNb2xlcy/igIt2b2x1bWVdIGluIFNlcnVtIG9yIFBsYXNtYSIKICAgICAgICAgIH0KICAg
+ICAgICBdLAogICAgICAgICJ0ZXh0IjogIkNob2xlc3Rlcm9sIgogICAgICB9LAogICAgICAicGVy
+Zm9ybWVyIjogWwogICAgICAgIHsKICAgICAgICAgICJyZWZlcmVuY2UiOiAiT3JnYW5pemF0aW9u
+LzE4MzI0NzNlLTJmZTAtNDUyZC1hYmU5LTNjZGI5ODc5NTIyZiIsCiAgICAgICAgICAiZGlzcGxh
+eSI6ICJBY21lIExhYm9yYXRvcnksIEluYyIKICAgICAgICB9CiAgICAgIF0sCiAgICAgICJ2YWx1
+ZVF1YW50aXR5IjogewogICAgICAgICJ2YWx1ZSI6IDYuMywKICAgICAgICAidW5pdCI6ICJtbW9s
+L0wiLAogICAgICAgICJzeXN0ZW0iOiAiaHR0cDovL3VuaXRzb2ZtZWFzdXJlLm9yZyIsCiAgICAg
+ICAgImNvZGUiOiAibW1vbC9MIgogICAgICB9LAogICAgICAicmVmZXJlbmNlUmFuZ2UiOiBbCiAg
+ICAgICAgewogICAgICAgICAgImhpZ2giOiB7CiAgICAgICAgICAgICJ2YWx1ZSI6IDQuNSwKICAg
+ICAgICAgICAgInVuaXQiOiAibW1vbC9MIiwKICAgICAgICAgICAgInN5c3RlbSI6ICJodHRwOi8v
+dW5pdHNvZm1lYXN1cmUub3JnIiwKICAgICAgICAgICAgImNvZGUiOiAibW1vbC9MIgogICAgICAg
+ICAgfQogICAgICAgIH0KICAgICAgXQogICAgfSwKICAgIHsKICAgICAgInJlc291cmNlVHlwZSI6
+ICJPYnNlcnZhdGlvbiIsCiAgICAgICJpZCI6ICJ0cmlnbHljZXJpZGUiLAogICAgICAic3RhdHVz
+IjogImZpbmFsIiwKICAgICAgImNvZGUiOiB7CiAgICAgICAgImNvZGluZyI6IFsKICAgICAgICAg
+IHsKICAgICAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vbG9pbmMub3JnIiwKICAgICAgICAgICAg
+ImNvZGUiOiAiMTQ5MjctOCIsCiAgICAgICAgICAgICJkaXNwbGF5IjogIlRyaWdseWNlcmlkZSBb
+TW9sZXMv4oCLdm9sdW1lXSBpbiBTZXJ1bSBvciBQbGFzbWEiCiAgICAgICAgICB9CiAgICAgICAg
+XSwKICAgICAgICAidGV4dCI6ICJUcmlnbHljZXJpZGUiCiAgICAgIH0sCiAgICAgICJwZXJmb3Jt
+ZXIiOiBbCiAgICAgICAgewogICAgICAgICAgInJlZmVyZW5jZSI6ICJPcmdhbml6YXRpb24vMTgz
+MjQ3M2UtMmZlMC00NTJkLWFiZTktM2NkYjk4Nzk1MjJmIiwKICAgICAgICAgICJkaXNwbGF5Ijog
+IkFjbWUgTGFib3JhdG9yeSwgSW5jIgogICAgICAgIH0KICAgICAgXSwKICAgICAgInZhbHVlUXVh
+bnRpdHkiOiB7CiAgICAgICAgInZhbHVlIjogMS4zLAogICAgICAgICJ1bml0IjogIm1tb2wvTCIs
+CiAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vdW5pdHNvZm1lYXN1cmUub3JnIiwKICAgICAgICAi
+Y29kZSI6ICJtbW9sL0wiCiAgICAgIH0sCiAgICAgICJyZWZlcmVuY2VSYW5nZSI6IFsKICAgICAg
+ICB7CiAgICAgICAgICAiaGlnaCI6IHsKICAgICAgICAgICAgInZhbHVlIjogMi4wLAogICAgICAg
+ICAgICAidW5pdCI6ICJtbW9sL0wiLAogICAgICAgICAgICAic3lzdGVtIjogImh0dHA6Ly91bml0
+c29mbWVhc3VyZS5vcmciLAogICAgICAgICAgICAiY29kZSI6ICJtbW9sL0wiCiAgICAgICAgICB9
+CiAgICAgICAgfQogICAgICBdCiAgICB9LAogICAgewogICAgICAicmVzb3VyY2VUeXBlIjogIk9i
+c2VydmF0aW9uIiwKICAgICAgImlkIjogImhkbGNob2xlc3Rlcm9sIiwKICAgICAgInN0YXR1cyI6
+ICJmaW5hbCIsCiAgICAgICJjb2RlIjogewogICAgICAgICJjb2RpbmciOiBbCiAgICAgICAgICB7
+CiAgICAgICAgICAgICJzeXN0ZW0iOiAiaHR0cDovL2xvaW5jLm9yZyIsCiAgICAgICAgICAgICJj
+b2RlIjogIjIwODUtOSIsCiAgICAgICAgICAgICJkaXNwbGF5IjogIkNob2xlc3Rlcm9sIGluIEhE
+TCBbTW9sZXMv4oCLdm9sdW1lXSBpbiBTZXJ1bSBvciBQbGFzbWEiCiAgICAgICAgICB9CiAgICAg
+ICAgXSwKICAgICAgICAidGV4dCI6ICJDaG9sZXN0ZXJvbCBpbiBIREwiCiAgICAgIH0sCiAgICAg
+ICJwZXJmb3JtZXIiOiBbCiAgICAgICAgewogICAgICAgICAgInJlZmVyZW5jZSI6ICJPcmdhbml6
+YXRpb24vMTgzMjQ3M2UtMmZlMC00NTJkLWFiZTktM2NkYjk4Nzk1MjJmIiwKICAgICAgICAgICJk
+aXNwbGF5IjogIkFjbWUgTGFib3JhdG9yeSwgSW5jIgogICAgICAgIH0KICAgICAgXSwKICAgICAg
+InZhbHVlUXVhbnRpdHkiOiB7CiAgICAgICAgInZhbHVlIjogMS4zLAogICAgICAgICJ1bml0Ijog
+Im1tb2wvTCIsCiAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vdW5pdHNvZm1lYXN1cmUub3JnIiwK
+ICAgICAgICAiY29kZSI6ICJtbW9sL0wiCiAgICAgIH0sCiAgICAgICJyZWZlcmVuY2VSYW5nZSI6
+IFsKICAgICAgICB7CiAgICAgICAgICAibG93IjogewogICAgICAgICAgICAidmFsdWUiOiAxLjUs
+CiAgICAgICAgICAgICJ1bml0IjogIm1tb2wvTCIsCiAgICAgICAgICAgICJzeXN0ZW0iOiAiaHR0
+cDovL3VuaXRzb2ZtZWFzdXJlLm9yZyIsCiAgICAgICAgICAgICJjb2RlIjogIm1tb2wvTCIKICAg
+ICAgICAgIH0KICAgICAgICB9CiAgICAgIF0KICAgIH0sCiAgICB7CiAgICAgICJyZXNvdXJjZVR5
+cGUiOiAiT2JzZXJ2YXRpb24iLAogICAgICAiaWQiOiAibGRsY2hvbGVzdGVyb2wiLAogICAgICAi
+c3RhdHVzIjogImZpbmFsIiwKICAgICAgImNvZGUiOiB7CiAgICAgICAgImNvZGluZyI6IFsKICAg
+ICAgICAgIHsKICAgICAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vbG9pbmMub3JnIiwKICAgICAg
+ICAgICAgImNvZGUiOiAiMzk0NjktMiIsCiAgICAgICAgICAgICJkaXNwbGF5IjogIkNob2xlc3Rl
+cm9sIGluIExETCBbTW9sZXMv4oCLdm9sdW1lXSBpbiBTZXJ1bSBvciBQbGFzbWEgYnkgY2FsY3Vs
+YXRpb24iCiAgICAgICAgICB9CiAgICAgICAgXSwKICAgICAgICAidGV4dCI6ICJMREwgQ2hvbC4g
+KENhbGMpIgogICAgICB9LAogICAgICAicGVyZm9ybWVyIjogWwogICAgICAgIHsKICAgICAgICAg
+ICJyZWZlcmVuY2UiOiAiT3JnYW5pemF0aW9uLzE4MzI0NzNlLTJmZTAtNDUyZC1hYmU5LTNjZGI5
+ODc5NTIyZiIsCiAgICAgICAgICAiZGlzcGxheSI6ICJBY21lIExhYm9yYXRvcnksIEluYyIKICAg
+ICAgICB9CiAgICAgIF0sCiAgICAgICJ2YWx1ZVF1YW50aXR5IjogewogICAgICAgICJ2YWx1ZSI6
+IDQuNiwKICAgICAgICAidW5pdCI6ICJtbW9sL0wiLAogICAgICAgICJzeXN0ZW0iOiAiaHR0cDov
+L3VuaXRzb2ZtZWFzdXJlLm9yZyIsCiAgICAgICAgImNvZGUiOiAibW1vbC9MIgogICAgICB9LAog
+ICAgICAicmVmZXJlbmNlUmFuZ2UiOiBbCiAgICAgICAgewogICAgICAgICAgImhpZ2giOiB7CiAg
+ICAgICAgICAgICJ2YWx1ZSI6IDMuMCwKICAgICAgICAgICAgInVuaXQiOiAibW1vbC9MIiwKICAg
+ICAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vdW5pdHNvZm1lYXN1cmUub3JnIiwKICAgICAgICAg
+ICAgImNvZGUiOiAibW1vbC9MIgogICAgICAgICAgfQogICAgICAgIH0KICAgICAgXQogICAgfQog
+IF0sCiAgImlkZW50aWZpZXIiOiBbCiAgICB7CiAgICAgICJzeXN0ZW0iOiAiaHR0cDovL2FjbWUu
+Y29tL2xhYi9yZXBvcnRzIiwKICAgICAgInZhbHVlIjogIjUyMzQzNDIiCiAgICB9CiAgXSwKICAi
+c3RhdHVzIjogImZpbmFsIiwKICAiY2F0ZWdvcnkiOiB7CiAgICAiY29kaW5nIjogWwogICAgICB7
+CiAgICAgICAgInN5c3RlbSI6ICJodHRwOi8vaGw3Lm9yZy9maGlyL3YyLzAwNzQiLAogICAgICAg
+ICJjb2RlIjogIkhNIgogICAgICB9CiAgICBdCiAgfSwKICAiY29kZSI6IHsKICAgICJjb2Rpbmci
+OiBbCiAgICAgIHsKICAgICAgICAic3lzdGVtIjogImh0dHA6Ly9sb2luYy5vcmciLAogICAgICAg
+ICJjb2RlIjogIjI0MzMxLTEiLAogICAgICAgICJkaXNwbGF5IjogIkxpcGlkIDE5OTYgcGFuZWwg
+LSBTZXJ1bSBvciBQbGFzbWEiCiAgICAgIH0KICAgIF0sCiAgICAidGV4dCI6ICJMaXBpZCBQYW5l
+bCIKICB9LAogICJzdWJqZWN0IjogewogICAgImlkZW50aWZpZXIiOiB7CiAgICAgICJzeXN0ZW0i
+OiAiaHR0cDovL0NhYm9MYWJzLmNvbS9kaWNjdGlvbmFyaWVzL3BhdGllbnQvaWRzIiwKICAgICAg
+InR5cGUiIDogewogICAgICAgICJjb2RpbmciOiBbCiAgICAgICAgICB7CiAgICAgICAgICAgICJz
+eXN0ZW0iOiAiaHR0cDovL0NhYm9MYWJzLmNvbS9kaWNjdGlvbmFyaWVzL2lkX3R5cGVzIiwKICAg
+ICAgICAgICAgImNvZGUiOiAiRUhSU0VSVkVSX0VIUl9VSUQiCiAgICAgICAgICB9CiAgICAgICAg
+XQogICAgICB9LAogICAgICAidmFsdWUiOiAiNTU1NTU1NTU1NSIKICAgIH0KICB9LAogICJlZmZl
+Y3RpdmVEYXRlVGltZSI6ICIyMDExLTAzLTA0VDA4OjMwOjAwKzExOjAwIiwKICAiaXNzdWVkIjog
+IjIwMTMtMDEtMjdUMTE6NDU6MzMrMTE6MDAiLAogICJwZXJmb3JtZXIiOiBbCiAgICB7CiAgICAg
+ICJhY3RvciI6IHsKICAgICAgICAicmVmZXJlbmNlIjogIk9yZ2FuaXphdGlvbi8xODMyNDczZS0y
+ZmUwLTQ1MmQtYWJlOS0zY2RiOTg3OTUyMmYiLAogICAgICAgICJkaXNwbGF5IjogIkFjbWUgTGFi
+b3JhdG9yeSwgSW5jIgogICAgICB9CiAgICB9CiAgXSwKICAicmVzdWx0IjogWwogICAgewogICAg
+ICAicmVmZXJlbmNlIjogIiNjaG9sZXN0ZXJvbCIKICAgIH0sCiAgICB7CiAgICAgICJyZWZlcmVu
+Y2UiOiAiI3RyaWdseWNlcmlkZSIKICAgIH0sCiAgICB7CiAgICAgICJyZWZlcmVuY2UiOiAiI2hk
+bGNob2xlc3Rlcm9sIgogICAgfSwKICAgIHsKICAgICAgInJlZmVyZW5jZSI6ICIjbGRsY2hvbGVz
+dGVyb2wiCiAgICB9CiAgXQp9</inboundTemplate>
+      <outboundTemplate encoding="base64">PHZlcnNpb25zIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVuZWhyLm9yZy92MSIgeG1sbnM6eHNp
+PSJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYS1pbnN0YW5jZSI+Cjx2ZXJzaW9uIHhz
+aTp0eXBlPSJPUklHSU5BTF9WRVJTSU9OIj4KICA8Y29udHJpYnV0aW9uPgogICAgPGlkIHhzaTp0
+eXBlPSJISUVSX09CSkVDVF9JRCI+CiAgICAgIDx2YWx1ZT4wNDQzZmI5Ny03OTU1LTQ3YTUtYTQx
+NC04YmEyZTQ0NTRhNWU8L3ZhbHVlPgogICAgPC9pZD4KICAgIDxuYW1lc3BhY2U+RUhSOjpDT01N
+T048L25hbWVzcGFjZT4KICAgIDx0eXBlPkNPTlRSSUJVVElPTjwvdHlwZT4KICA8L2NvbnRyaWJ1
+dGlvbj4KICA8Y29tbWl0X2F1ZGl0PgogICAgPHN5c3RlbV9pZD5DQUJPTEFCU19FSFI8L3N5c3Rl
+bV9pZD4KICAgIDxjb21taXR0ZXIgeHNpOnR5cGU9IlBBUlRZX0lERU5USUZJRUQiPgogICAgICA8
+ZXh0ZXJuYWxfcmVmPgogICAgICAgIDxpZCB4c2k6dHlwZT0iSElFUl9PQkpFQ1RfSUQiPgogICAg
+ICAgICAgPHZhbHVlPmY3NDU4MDhjLTljZDQtNDcyYy1iMDE4LTM4YTVkMDQ4YTIwODwvdmFsdWU+
+CiAgICAgICAgPC9pZD4KICAgICAgICA8bmFtZXNwYWNlPkRFTU9HUkFQSElDPC9uYW1lc3BhY2U+
+CiAgICAgICAgPHR5cGU+UEVSU09OPC90eXBlPgogICAgICA8L2V4dGVybmFsX3JlZj4KICAgICAg
+PG5hbWU+RHIuIFlhbWFtb3RvPC9uYW1lPgogICAgPC9jb21taXR0ZXI+CiAgICA8dGltZV9jb21t
+aXR0ZWQ+CiAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMDc5LTAzMDA8L3ZhbHVlPgogICAg
+PC90aW1lX2NvbW1pdHRlZD4KICAgIDxjaGFuZ2VfdHlwZT4KICAgICAgPHZhbHVlPmNyZWF0aW9u
+PC92YWx1ZT4KICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgPHRlcm1pbm9sb2d5X2lkPgog
+ICAgICAgICAgPHZhbHVlPm9wZW5laHI8L3ZhbHVlPgogICAgICAgIDwvdGVybWlub2xvZ3lfaWQ+
+CiAgICAgICAgPGNvZGVfc3RyaW5nPjI0OTwvY29kZV9zdHJpbmc+CiAgICAgIDwvZGVmaW5pbmdf
+Y29kZT4KICAgIDwvY2hhbmdlX3R5cGU+CiAgPC9jb21taXRfYXVkaXQ+CiAgPHVpZD4KICAgIDx2
+YWx1ZT5iNDYwZTBjZi0yYzkzLTRjOWQtYjViNy0xNjk0YzUxMzQ4MWQ6OkVNUl9BUFA6OjE8L3Zh
+bHVlPgogIDwvdWlkPgogIDxkYXRhIHhzaTp0eXBlPSJDT01QT1NJVElPTiIgYXJjaGV0eXBlX25v
+ZGVfaWQ9Im9wZW5FSFItRUhSLUNPTVBPU0lUSU9OLnJlcG9ydC1yZXN1bHQudjEiPgogICAgPG5h
+bWU+CiAgICAgIDx2YWx1ZT5SZXN1bHQgUmVwb3J0PC92YWx1ZT4KICAgIDwvbmFtZT4KICAgIDxh
+cmNoZXR5cGVfZGV0YWlscz4KICAgICAgPGFyY2hldHlwZV9pZD4KICAgICAgICA8dmFsdWU+b3Bl
+bkVIUi1FSFItQ09NUE9TSVRJT04ucmVwb3J0LXJlc3VsdC52MTwvdmFsdWU+CiAgICAgIDwvYXJj
+aGV0eXBlX2lkPgogICAgICA8dGVtcGxhdGVfaWQ+CiAgICAgICAgPHZhbHVlPmxhYm9yYXRvcnlf
+cmVzdWx0c19yZXBvcnQuZW4udjE8L3ZhbHVlPgogICAgICA8L3RlbXBsYXRlX2lkPgogICAgICA8
+cm1fdmVyc2lvbj4xLjAuMjwvcm1fdmVyc2lvbj4KICAgIDwvYXJjaGV0eXBlX2RldGFpbHM+CiAg
+ICA8bGFuZ3VhZ2U+CiAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICA8dmFsdWU+SVNPXzYz
+OS0xPC92YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPmVu
+PC9jb2RlX3N0cmluZz4KICAgIDwvbGFuZ3VhZ2U+CiAgICA8dGVycml0b3J5PgogICAgICA8dGVy
+bWlub2xvZ3lfaWQ+CiAgICAgICAgPHZhbHVlPklTT18zMTY2LTE8L3ZhbHVlPgogICAgICA8L3Rl
+cm1pbm9sb2d5X2lkPgogICAgICA8Y29kZV9zdHJpbmc+VVk8L2NvZGVfc3RyaW5nPgogICAgPC90
+ZXJyaXRvcnk+CiAgICA8Y2F0ZWdvcnk+CiAgICAgIDx2YWx1ZT5ldmVudDwvdmFsdWU+CiAgICAg
+IDxkZWZpbmluZ19jb2RlPgogICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICAgIDx2YWx1
+ZT5vcGVuZWhyPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgIDxjb2Rl
+X3N0cmluZz40MzM8L2NvZGVfc3RyaW5nPgogICAgICA8L2RlZmluaW5nX2NvZGU+CiAgICA8L2Nh
+dGVnb3J5PgogICAgPGNvbXBvc2VyIHhzaTp0eXBlPSJQQVJUWV9JREVOVElGSUVEIj4KICAgICAg
+PGV4dGVybmFsX3JlZj4KICAgICAgICA8aWQgeHNpOnR5cGU9IkhJRVJfT0JKRUNUX0lEIj4KICAg
+ICAgICAgIDx2YWx1ZT44ZDlhNjI2NS1jNDQ1LTQwZGYtODNmZS0yZWE3YmNhNzdhNTM8L3ZhbHVl
+PgogICAgICAgIDwvaWQ+CiAgICAgICAgPG5hbWVzcGFjZT5ERU1PR1JBUEhJQzwvbmFtZXNwYWNl
+PgogICAgICAgIDx0eXBlPlBFUlNPTjwvdHlwZT4KICAgICAgPC9leHRlcm5hbF9yZWY+CiAgICAg
+IDxuYW1lPkRyLiBIb3VzZTwvbmFtZT4KICAgIDwvY29tcG9zZXI+CiAgICA8Y29udGV4dD4KICAg
+ICAgPHN0YXJ0X3RpbWU+CiAgICAgICAgPHZhbHVlPjIwMTgwNzEyVDE4NTkxOCwxMzctMDMwMDwv
+dmFsdWU+CiAgICAgIDwvc3RhcnRfdGltZT4KICAgICAgPHNldHRpbmc+CiAgICAgICAgPHZhbHVl
+Pkhvc3BpdGFsIEE8L3ZhbHVlPgogICAgICAgIDxkZWZpbmluZ19jb2RlPgogICAgICAgICAgPHRl
+cm1pbm9sb2d5X2lkPgogICAgICAgICAgICA8dmFsdWU+b3BlbmVocjwvdmFsdWU+CiAgICAgICAg
+ICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgPGNvZGVfc3RyaW5nPjIyOTwvY29kZV9zdHJp
+bmc+CiAgICAgICAgPC9kZWZpbmluZ19jb2RlPgogICAgICA8L3NldHRpbmc+CiAgICAgIDxvdGhl
+cl9jb250ZXh0IGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDEiIHhzaTp0eXBlPSJJVEVNX1RSRUUi
+PgogICAgICAgIDxuYW1lPgogICAgICAgICAgPHZhbHVlPlRyZWU8L3ZhbHVlPgogICAgICAgIDwv
+bmFtZT4KICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDAwMiIgeHNpOnR5cGU9
+IkVMRU1FTlQiPgogICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5SZXBvcnQgSUQ8
+L3ZhbHVlPgogICAgICAgICAgPC9uYW1lPgogICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9U
+RVhUIj4KICAgICAgICAgICAgPHZhbHVlPjwvdmFsdWU+CiAgICAgICAgICA8L3ZhbHVlPgogICAg
+ICAgIDwvaXRlbXM+CiAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDUiIHhz
+aTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICA8dmFsdWU+U3Rh
+dHVzPC92YWx1ZT4KICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0i
+RFZfVEVYVCI+CiAgICAgICAgICAgIDx2YWx1ZT48L3ZhbHVlPgogICAgICAgICAgPC92YWx1ZT4K
+ICAgICAgICA8L2l0ZW1zPgogICAgICA8L290aGVyX2NvbnRleHQ+CiAgICA8L2NvbnRleHQ+CiAg
+ICA8Y29udGVudCBhcmNoZXR5cGVfbm9kZV9pZD0ib3BlbkVIUi1FSFItT0JTRVJWQVRJT04ubGFi
+b3JhdG9yeV90ZXN0X3Jlc3VsdC1jb2RlZC52MCIgeHNpOnR5cGU9Ik9CU0VSVkFUSU9OIj4KICAg
+ICAgPG5hbWU+CiAgICAgICAgPHZhbHVlPkxhYm9yYXRvcnkgdGVzdCByZXN1bHQ8L3ZhbHVlPgog
+ICAgICA8L25hbWU+CiAgICAgIDxsYW5ndWFnZT4KICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAg
+ICAgICAgICA8dmFsdWU+SVNPXzYzOS0xPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lk
+PgogICAgICAgIDxjb2RlX3N0cmluZz5lbjwvY29kZV9zdHJpbmc+CiAgICAgIDwvbGFuZ3VhZ2U+
+CiAgICAgIDxlbmNvZGluZz4KICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgICA8dmFs
+dWU+VW5pY29kZTwvdmFsdWU+CiAgICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgICA8Y29k
+ZV9zdHJpbmc+VVRGLTg8L2NvZGVfc3RyaW5nPgogICAgICA8L2VuY29kaW5nPgogICAgICA8c3Vi
+amVjdCB4c2k6dHlwZT0iUEFSVFlfU0VMRiIgLz4KICAgICAgPHByb3RvY29sIGFyY2hldHlwZV9u
+b2RlX2lkPSJhdDAwMDQiIHhzaTp0eXBlPSJJVEVNX1RSRUUiPgogICAgICAgIDxuYW1lPgogICAg
+ICAgICAgPHZhbHVlPlRyZWU8L3ZhbHVlPgogICAgICAgIDwvbmFtZT4KICAgICAgICA8aXRlbXMg
+YXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA2OCIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAg
+PG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5MYWJvcmF0b3J5IHRlc3QgaWRlbnRpZmllcjwvdmFs
+dWU+CiAgICAgICAgICA8L25hbWU+CiAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRWX0lERU5U
+SUZJRVIiPgogICAgICAgICAgICA8aXNzdWVyPkhvc3BpdGFsIGRlIENsaW5pY2FzPC9pc3N1ZXI+
+CiAgICAgICAgICAgIDxhc3NpZ25lcj5Ib3NwaXRhbCBkZSBDbGluaWNhczwvYXNzaWduZXI+CiAg
+ICAgICAgICAgIDxpZD40ODM5NDgxNjwvaWQ+CiAgICAgICAgICAgIDx0eXBlPkxPQ0FMSUQ8L3R5
+cGU+CiAgICAgICAgICA8L3ZhbHVlPgogICAgICAgIDwvaXRlbXM+CiAgICAgIDwvcHJvdG9jb2w+
+CiAgICAgIDxkYXRhIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDEiIHhzaTp0eXBlPSJISVNUT1JZ
+Ij4KICAgICAgICA8bmFtZT4KICAgICAgICAgIDx2YWx1ZT5FdmVudCBTZXJpZXM8L3ZhbHVlPgog
+ICAgICAgIDwvbmFtZT4KICAgICAgICA8b3JpZ2luIHhzaTp0eXBlPSJEVl9EQVRFX1RJTUUiPgog
+ICAgICAgICAgPHZhbHVlPjIwMTgwNzEyVDE4NTkxOCwyMTctMDMwMDwvdmFsdWU+CiAgICAgICAg
+PC9vcmlnaW4+CiAgICAgICAgPGV2ZW50cyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAyIiB4c2k6
+dHlwZT0iUE9JTlRfRVZFTlQiPgogICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5B
+bnkgZXZlbnQ8L3ZhbHVlPgogICAgICAgICAgPC9uYW1lPgogICAgICAgICAgPHRpbWUgeHNpOnR5
+cGU9IkRWX0RBVEVfVElNRSI+CiAgICAgICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMjIz
+LTAzMDA8L3ZhbHVlPgogICAgICAgICAgPC90aW1lPgogICAgICAgICAgPGRhdGEgYXJjaGV0eXBl
+X25vZGVfaWQ9ImF0MDAwMyIgeHNpOnR5cGU9IklURU1fVFJFRSI+CiAgICAgICAgICAgIDxuYW1l
+PgogICAgICAgICAgICAgIDx2YWx1ZT5UcmVlPC92YWx1ZT4KICAgICAgICAgICAgPC9uYW1lPgog
+ICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDAwNS4xIiB4c2k6dHlwZT0i
+RUxFTUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWU+VGVz
+dCBuYW1lPC92YWx1ZT4KICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVl
+IHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgIDx2YWx1ZT48L3ZhbHVl
+PgogICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgIDx0ZXJt
+aW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgICA8dmFsdWU+TE9JTkM8L3ZhbHVlPgogICAg
+ICAgICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICA8Y29kZV9z
+dHJpbmc+PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4KICAg
+ICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICA8aXRl
+bXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA3My4xIiB4c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAg
+ICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWU+VGVzdCBzdGF0dXM8L3ZhbHVl
+PgogICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRW
+X0NPREVEX1RFWFQiPgogICAgICAgICAgICAgICAgPHZhbHVlPlJlZ2lzdGVyZWQ8L3ZhbHVlPgog
+ICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgIDx0ZXJtaW5v
+bG9neV9pZD4KICAgICAgICAgICAgICAgICAgICA8dmFsdWU+bG9jYWw8L3ZhbHVlPgogICAgICAg
+ICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICA8Y29kZV9zdHJp
+bmc+YXQwMTA3PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4K
+ICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICA8
+aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA3NSIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAg
+ICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPlRlc3Qgc3RhdHVzIHRpbWVz
+dGFtcDwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgIDx2YWx1ZSB4
+c2k6dHlwZT0iRFZfREFURV9USU1FIj4KICAgICAgICAgICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQx
+ODU5MTgsMjQ4LTAzMDA8L3ZhbHVlPgogICAgICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgICAg
+IDwvaXRlbXM+CiAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDc3IiB4
+c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8
+dmFsdWU+RGlhZ25vc3RpYyBzZXJ2aWNlIGNhdGVnb3J5PC92YWx1ZT4KICAgICAgICAgICAgICA8
+L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9URVhUIj4KICAgICAgICAg
+ICAgICAgIDx2YWx1ZT48L3ZhbHVlPgogICAgICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgICAg
+IDwvaXRlbXM+CiAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0ib3BlbkVIUi1F
+SFItQ0xVU1RFUi5sYWJvcmF0b3J5X3Rlc3RfYW5hbHl0ZS1jb2RlZC52MCIgeHNpOnR5cGU9IkNM
+VVNURVIiPgogICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPkxhYm9y
+YXRvcnkgdGVzdCBhbmFseXRlPC92YWx1ZT4KICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAg
+ICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMjQuMSIgeHNpOnR5cGU9IkVMRU1F
+TlQiPgogICAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFs
+eXRlIG5hbWU8L3ZhbHVlPgogICAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgICAg
+PHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgICAgPHZhbHVl
+PjwvdmFsdWU+CiAgICAgICAgICAgICAgICAgIDxkZWZpbmluZ19jb2RlPgogICAgICAgICAgICAg
+ICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgICAgIDx2YWx1ZT5MT0lO
+QzwvdmFsdWU+CiAgICAgICAgICAgICAgICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgICAg
+ICAgICAgICAgICA8Y29kZV9zdHJpbmc+PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgICAg
+PC9kZWZpbmluZ19jb2RlPgogICAgICAgICAgICAgICAgPC92YWx1ZT4KICAgICAgICAgICAgICA8
+L2l0ZW1zPgogICAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAxIiB4
+c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAgICA8bmFtZT4KICAgICAgICAgICAgICAg
+ICAgPHZhbHVlPkFuYWx5dGUgcmVzdWx0PC92YWx1ZT4KICAgICAgICAgICAgICAgIDwvbmFtZT4K
+ICAgICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfUVVBTlRJVFkiPgogICAgICAgICAg
+ICAgICAgICA8bWFnbml0dWRlPjE3NC4yNzEzNDUxMzg1NDk4PC9tYWduaXR1ZGU+CiAgICAgICAg
+ICAgICAgICAgIDx1bml0cz5fbm9fY29uc3RyYWludF9kZWZpbmVkXzwvdW5pdHM+CiAgICAgICAg
+ICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICAgIDwvaXRlbXM+CiAgICAgICAgICAgICAgPGl0
+ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDUuMSIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAg
+ICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFseXRlIHJlc3Vs
+dCBzdGF0dXM8L3ZhbHVlPgogICAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgICAg
+PHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgICAgPHZhbHVl
+PlJlZ2lzdGVyZWQ8L3ZhbHVlPgogICAgICAgICAgICAgICAgICA8ZGVmaW5pbmdfY29kZT4KICAg
+ICAgICAgICAgICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgICAgICAgICAgICAgICA8
+dmFsdWU+bG9jYWw8L3ZhbHVlPgogICAgICAgICAgICAgICAgICAgIDwvdGVybWlub2xvZ3lfaWQ+
+CiAgICAgICAgICAgICAgICAgICAgPGNvZGVfc3RyaW5nPmF0MDAxNTwvY29kZV9zdHJpbmc+CiAg
+ICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4KICAgICAgICAgICAgICAgIDwvdmFsdWU+
+CiAgICAgICAgICAgICAgPC9pdGVtcz4KICAgICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25v
+ZGVfaWQ9ImF0MDAwNiIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAgICAgICAgPG5hbWU+
+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFseXRlIHJlc3VsdCBzdGF0dXMgdGltZXN0YW1w
+PC92YWx1ZT4KICAgICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICAgIDx2YWx1ZSB4
+c2k6dHlwZT0iRFZfREFURV9USU1FIj4KICAgICAgICAgICAgICAgICAgPHZhbHVlPjIwMTgwNzEy
+VDE4NTkxOCwyOTctMDMwMDwvdmFsdWU+CiAgICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAg
+ICAgICAgIDwvaXRlbXM+CiAgICAgICAgICAgIDwvaXRlbXM+CiAgICAgICAgICA8L2RhdGE+CiAg
+ICAgICAgPC9ldmVudHM+CiAgICAgIDwvZGF0YT4KICAgIDwvY29udGVudD4KICA8L2RhdGE+CiAg
+PGxpZmVjeWNsZV9zdGF0ZT4KICAgIDx2YWx1ZT5jb21wbGV0ZTwvdmFsdWU+CiAgICA8ZGVmaW5p
+bmdfY29kZT4KICAgICAgPHRlcm1pbm9sb2d5X2lkPgogICAgICAgIDx2YWx1ZT5vcGVuZWhyPC92
+YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPjUzMjwvY29k
+ZV9zdHJpbmc+CiAgICA8L2RlZmluaW5nX2NvZGU+CiAgPC9saWZlY3ljbGVfc3RhdGU+CjwvdmVy
+c2lvbj4KPC92ZXJzaW9ucz4K</outboundTemplate>
+      <inboundDataType>JSON</inboundDataType>
+      <outboundDataType>XML</outboundDataType>
+      <inboundProperties class="com.mirth.connect.plugins.datatypes.json.JSONDataTypeProperties" version="3.5.2">
+        <batchProperties class="com.mirth.connect.plugins.datatypes.json.JSONBatchProperties" version="3.5.2">
+          <splitType>JavaScript</splitType>
+          <batchScript></batchScript>
+        </batchProperties>
+      </inboundProperties>
+      <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+        <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+          <stripNamespaces>false</stripNamespaces>
+        </serializationProperties>
+        <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+          <splitType>Element_Name</splitType>
+          <elementName></elementName>
+          <level>1</level>
+          <query></query>
+          <batchScript></batchScript>
+        </batchProperties>
+      </outboundProperties>
+    </transformer>
+    <filter version="3.5.2">
+      <elements/>
+    </filter>
+    <transportName>HTTP Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="3.5.2">
+      <metaDataId>1</metaDataId>
+      <name>Destination 1</name>
+      <properties class="com.mirth.connect.connectors.js.JavaScriptDispatcherProperties" version="3.5.2">
+        <pluginProperties/>
+        <destinationConnectorProperties version="3.5.2">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <script>logger.info(connectorMessage.getEncodedData());</script>
+      </properties>
+      <transformer version="3.5.2">
+        <elements>
+          <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+            <sequenceNumber>0</sequenceNumber>
+            <script>//logger.info($(&apos;ehr_uid&apos;));
+
+/*
+var analyte_cluster = msg[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][5];
+
+logger.info(msg[&apos;coco&apos;]);
+logger.info(msg[&apos;pupu&apos;]);
+logger.info(msg[&apos;pupu&apos;][&apos;popo&apos;]);
+
+logger.info(msg);
+logger.info(msg[&apos;version&apos;]);
+logger.info(msg[&apos;version&apos;][&apos;data&apos;]);
+logger.info(msg[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;]);
+logger.info(msg[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;]);
+logger.info(msg[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;]);
+logger.info(msg[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;]);
+*/
+
+/*
+for (var i = 1; i &lt;= 3; i++)
+{
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][5][i] = analyte_cluster.copy();
+}
+*/
+
+// the analyte node should have a total of 4 occurrences on the output</script>
+          </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        </elements>
+        <inboundTemplate encoding="base64">PHZlcnNpb25zIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVuZWhyLm9yZy92MSIgeG1sbnM6eHNp
+PSJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYS1pbnN0YW5jZSI+Cjxjb2NvPnBlcGU8
+L2NvY28+CjxwdXB1Pjxwb3BvPnVjdWw8L3BvcG8+PC9wdXB1Pgo8dmVyc2lvbiB4c2k6dHlwZT0i
+T1JJR0lOQUxfVkVSU0lPTiI+CiAgPGNvbnRyaWJ1dGlvbj4KICAgIDxpZCB4c2k6dHlwZT0iSElF
+Ul9PQkpFQ1RfSUQiPgogICAgICA8dmFsdWU+MDQ0M2ZiOTctNzk1NS00N2E1LWE0MTQtOGJhMmU0
+NDU0YTVlPC92YWx1ZT4KICAgIDwvaWQ+CiAgICA8bmFtZXNwYWNlPkVIUjo6Q09NTU9OPC9uYW1l
+c3BhY2U+CiAgICA8dHlwZT5DT05UUklCVVRJT048L3R5cGU+CiAgPC9jb250cmlidXRpb24+CiAg
+PGNvbW1pdF9hdWRpdD4KICAgIDxzeXN0ZW1faWQ+Q0FCT0xBQlNfRUhSPC9zeXN0ZW1faWQ+CiAg
+ICA8Y29tbWl0dGVyIHhzaTp0eXBlPSJQQVJUWV9JREVOVElGSUVEIj4KICAgICAgPGV4dGVybmFs
+X3JlZj4KICAgICAgICA8aWQgeHNpOnR5cGU9IkhJRVJfT0JKRUNUX0lEIj4KICAgICAgICAgIDx2
+YWx1ZT5mNzQ1ODA4Yy05Y2Q0LTQ3MmMtYjAxOC0zOGE1ZDA0OGEyMDg8L3ZhbHVlPgogICAgICAg
+IDwvaWQ+CiAgICAgICAgPG5hbWVzcGFjZT5ERU1PR1JBUEhJQzwvbmFtZXNwYWNlPgogICAgICAg
+IDx0eXBlPlBFUlNPTjwvdHlwZT4KICAgICAgPC9leHRlcm5hbF9yZWY+CiAgICAgIDxuYW1lPkRy
+LiBZYW1hbW90bzwvbmFtZT4KICAgIDwvY29tbWl0dGVyPgogICAgPHRpbWVfY29tbWl0dGVkPgog
+ICAgICA8dmFsdWU+MjAxODA3MTJUMTg1OTE4LDA3OS0wMzAwPC92YWx1ZT4KICAgIDwvdGltZV9j
+b21taXR0ZWQ+CiAgICA8Y2hhbmdlX3R5cGU+CiAgICAgIDx2YWx1ZT5jcmVhdGlvbjwvdmFsdWU+
+CiAgICAgIDxkZWZpbmluZ19jb2RlPgogICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICAg
+IDx2YWx1ZT5vcGVuZWhyPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAg
+IDxjb2RlX3N0cmluZz4yNDk8L2NvZGVfc3RyaW5nPgogICAgICA8L2RlZmluaW5nX2NvZGU+CiAg
+ICA8L2NoYW5nZV90eXBlPgogIDwvY29tbWl0X2F1ZGl0PgogIDx1aWQ+CiAgICA8dmFsdWU+YjQ2
+MGUwY2YtMmM5My00YzlkLWI1YjctMTY5NGM1MTM0ODFkOjpFTVJfQVBQOjoxPC92YWx1ZT4KICA8
+L3VpZD4KICA8ZGF0YSB4c2k6dHlwZT0iQ09NUE9TSVRJT04iIGFyY2hldHlwZV9ub2RlX2lkPSJv
+cGVuRUhSLUVIUi1DT01QT1NJVElPTi5yZXBvcnQtcmVzdWx0LnYxIj4KICAgIDxuYW1lPgogICAg
+ICA8dmFsdWU+UmVzdWx0IFJlcG9ydDwvdmFsdWU+CiAgICA8L25hbWU+CiAgICA8YXJjaGV0eXBl
+X2RldGFpbHM+CiAgICAgIDxhcmNoZXR5cGVfaWQ+CiAgICAgICAgPHZhbHVlPm9wZW5FSFItRUhS
+LUNPTVBPU0lUSU9OLnJlcG9ydC1yZXN1bHQudjE8L3ZhbHVlPgogICAgICA8L2FyY2hldHlwZV9p
+ZD4KICAgICAgPHRlbXBsYXRlX2lkPgogICAgICAgIDx2YWx1ZT5sYWJvcmF0b3J5X3Jlc3VsdHNf
+cmVwb3J0LmVuLnYxPC92YWx1ZT4KICAgICAgPC90ZW1wbGF0ZV9pZD4KICAgICAgPHJtX3ZlcnNp
+b24+MS4wLjI8L3JtX3ZlcnNpb24+CiAgICA8L2FyY2hldHlwZV9kZXRhaWxzPgogICAgPGxhbmd1
+YWdlPgogICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgPHZhbHVlPklTT182MzktMTwvdmFs
+dWU+CiAgICAgIDwvdGVybWlub2xvZ3lfaWQ+CiAgICAgIDxjb2RlX3N0cmluZz5lbjwvY29kZV9z
+dHJpbmc+CiAgICA8L2xhbmd1YWdlPgogICAgPHRlcnJpdG9yeT4KICAgICAgPHRlcm1pbm9sb2d5
+X2lkPgogICAgICAgIDx2YWx1ZT5JU09fMzE2Ni0xPC92YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9n
+eV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPlVZPC9jb2RlX3N0cmluZz4KICAgIDwvdGVycml0b3J5
+PgogICAgPGNhdGVnb3J5PgogICAgICA8dmFsdWU+ZXZlbnQ8L3ZhbHVlPgogICAgICA8ZGVmaW5p
+bmdfY29kZT4KICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgICA8dmFsdWU+b3BlbmVo
+cjwvdmFsdWU+CiAgICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgICA8Y29kZV9zdHJpbmc+
+NDMzPC9jb2RlX3N0cmluZz4KICAgICAgPC9kZWZpbmluZ19jb2RlPgogICAgPC9jYXRlZ29yeT4K
+ICAgIDxjb21wb3NlciB4c2k6dHlwZT0iUEFSVFlfSURFTlRJRklFRCI+CiAgICAgIDxleHRlcm5h
+bF9yZWY+CiAgICAgICAgPGlkIHhzaTp0eXBlPSJISUVSX09CSkVDVF9JRCI+CiAgICAgICAgICA8
+dmFsdWU+OGQ5YTYyNjUtYzQ0NS00MGRmLTgzZmUtMmVhN2JjYTc3YTUzPC92YWx1ZT4KICAgICAg
+ICA8L2lkPgogICAgICAgIDxuYW1lc3BhY2U+REVNT0dSQVBISUM8L25hbWVzcGFjZT4KICAgICAg
+ICA8dHlwZT5QRVJTT048L3R5cGU+CiAgICAgIDwvZXh0ZXJuYWxfcmVmPgogICAgICA8bmFtZT5E
+ci4gSG91c2U8L25hbWU+CiAgICA8L2NvbXBvc2VyPgogICAgPGNvbnRleHQ+CiAgICAgIDxzdGFy
+dF90aW1lPgogICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMTM3LTAzMDA8L3ZhbHVlPgog
+ICAgICA8L3N0YXJ0X3RpbWU+CiAgICAgIDxzZXR0aW5nPgogICAgICAgIDx2YWx1ZT5Ib3NwaXRh
+bCBBPC92YWx1ZT4KICAgICAgICA8ZGVmaW5pbmdfY29kZT4KICAgICAgICAgIDx0ZXJtaW5vbG9n
+eV9pZD4KICAgICAgICAgICAgPHZhbHVlPm9wZW5laHI8L3ZhbHVlPgogICAgICAgICAgPC90ZXJt
+aW5vbG9neV9pZD4KICAgICAgICAgIDxjb2RlX3N0cmluZz4yMjk8L2NvZGVfc3RyaW5nPgogICAg
+ICAgIDwvZGVmaW5pbmdfY29kZT4KICAgICAgPC9zZXR0aW5nPgogICAgICA8b3RoZXJfY29udGV4
+dCBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAxIiB4c2k6dHlwZT0iSVRFTV9UUkVFIj4KICAgICAg
+ICA8bmFtZT4KICAgICAgICAgIDx2YWx1ZT5UcmVlPC92YWx1ZT4KICAgICAgICA8L25hbWU+CiAg
+ICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDIiIHhzaTp0eXBlPSJFTEVNRU5U
+Ij4KICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICA8dmFsdWU+UmVwb3J0IElEPC92YWx1ZT4K
+ICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfVEVYVCI+CiAg
+ICAgICAgICAgIDx2YWx1ZT56TXZnWXd4UEggVmVnVlRWdERXT1RHdixQRGN4cGJya0pyIFlUdWxH
+YW5aLFVxbE1TWkdZIElLYlUsZXNMdWRWQUZ3Sll1WG5SZFBDRm1qa0VNV1ZCTHRvYVhCdlpKSWhR
+T3JKaVpmWHhhY1VlSGlIRkZZQVNMallxY2FwVGtvSEtrelgsQmVUYWR2LE9VU0FIYUxIaHphRWZI
+dkxaZEJvSWhVdHVhSlAsbWJqaGhSbXQsQ2hHbVdrVG5uQ2tpSFRIbkhORnVQUlFsZllGcGtwaVBR
+d1RMV1AsWU5PcmtDUndicC55TGFDQkhud0NDSWRWd0dtWVVRc2N2a1NsQWM8L3ZhbHVlPgogICAg
+ICAgICAgPC92YWx1ZT4KICAgICAgICA8L2l0ZW1zPgogICAgICAgIDxpdGVtcyBhcmNoZXR5cGVf
+bm9kZV9pZD0iYXQwMDA1IiB4c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICA8bmFtZT4KICAg
+ICAgICAgICAgPHZhbHVlPlN0YXR1czwvdmFsdWU+CiAgICAgICAgICA8L25hbWU+CiAgICAgICAg
+ICA8dmFsdWUgeHNpOnR5cGU9IkRWX1RFWFQiPgogICAgICAgICAgICA8dmFsdWU+emEub3dzenFv
+Zm9CdE1Sb0RSVlJwWnVOUXB0eGp6U1l5R0gudVNPR0tmek55Rk54ZFAuYnBmeFBwdHZyb2d0ICBI
+QU9heUh3V0xES2pWbE9BREJ4WFNkTEF3TkFmYnVjbVR4RlpvSXZLWnVTTHUgclV0bWRncFRKZWFR
+RlZrV2ttSW9SeEZmWnoud2lldkRLaE5lUHdHY2l3V1pHR1NHVUphQ1V6c1p2SiBZVmVkbFdCT0NY
+dlZsd0thLGNjSlRwREVFaFZFeWZLeGNZemNtR1dJZ0RLZ1V5SG53TEhHeFhhcUguQlJ4c2ZTTG5C
+UmxHSmdqY0FkdlRnbkRqaWVaPC92YWx1ZT4KICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgPC9p
+dGVtcz48IS0tIFNMT1QgSU4gL2NvbnRleHQvb3RoZXJfY29udGV4dFthdDAwMDFdL2l0ZW1zW2F0
+MDAwNl0gTk9UIFBST0NFU1NFRCAtLT4KICAgICAgPC9vdGhlcl9jb250ZXh0PgogICAgPC9jb250
+ZXh0PgogICAgPGNvbnRlbnQgYXJjaGV0eXBlX25vZGVfaWQ9Im9wZW5FSFItRUhSLU9CU0VSVkFU
+SU9OLmxhYm9yYXRvcnlfdGVzdF9yZXN1bHQtY29kZWQudjAiIHhzaTp0eXBlPSJPQlNFUlZBVElP
+TiI+CiAgICAgIDxuYW1lPgogICAgICAgIDx2YWx1ZT5MYWJvcmF0b3J5IHRlc3QgcmVzdWx0ITwv
+dmFsdWU+CiAgICAgIDwvbmFtZT4KICAgICAgPGxhbmd1YWdlPgogICAgICAgIDx0ZXJtaW5vbG9n
+eV9pZD4KICAgICAgICAgIDx2YWx1ZT5JU09fNjM5LTE8L3ZhbHVlPgogICAgICAgIDwvdGVybWlu
+b2xvZ3lfaWQ+CiAgICAgICAgPGNvZGVfc3RyaW5nPmVuPC9jb2RlX3N0cmluZz4KICAgICAgPC9s
+YW5ndWFnZT4KICAgICAgPGVuY29kaW5nPgogICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAg
+ICAgIDx2YWx1ZT5Vbmljb2RlPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAg
+ICAgIDxjb2RlX3N0cmluZz5VVEYtODwvY29kZV9zdHJpbmc+CiAgICAgIDwvZW5jb2Rpbmc+CiAg
+ICAgIDxzdWJqZWN0IHhzaTp0eXBlPSJQQVJUWV9TRUxGIiAvPgogICAgICA8cHJvdG9jb2wgYXJj
+aGV0eXBlX25vZGVfaWQ9ImF0MDAwNCIgeHNpOnR5cGU9IklURU1fVFJFRSI+CiAgICAgICAgPG5h
+bWU+CiAgICAgICAgICA8dmFsdWU+VHJlZTwvdmFsdWU+CiAgICAgICAgPC9uYW1lPjwhLS0gU0xP
+VCBJTiAvcHJvdG9jb2xbYXQwMDA0XS9pdGVtc1thdDAwMTddIE5PVCBQUk9DRVNTRUQgLS0+CiAg
+ICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwNjgiIHhzaTp0eXBlPSJFTEVNRU5U
+Ij4KICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICA8dmFsdWU+TGFib3JhdG9yeSB0ZXN0IGlk
+ZW50aWZpZXI8L3ZhbHVlPgogICAgICAgICAgPC9uYW1lPgogICAgICAgICAgPHZhbHVlIHhzaTp0
+eXBlPSJEVl9JREVOVElGSUVSIj4KICAgICAgICAgICAgPGlzc3Vlcj5Ib3NwaXRhbCBkZSBDbGlu
+aWNhczwvaXNzdWVyPgogICAgICAgICAgICA8YXNzaWduZXI+SG9zcGl0YWwgZGUgQ2xpbmljYXM8
+L2Fzc2lnbmVyPgogICAgICAgICAgICA8aWQ+NDgzOTQ4MTY8L2lkPgogICAgICAgICAgICA8dHlw
+ZT5MT0NBTElEPC90eXBlPgogICAgICAgICAgPC92YWx1ZT4KICAgICAgICA8L2l0ZW1zPjwhLS0g
+U0xPVCBJTiAvcHJvdG9jb2xbYXQwMDA0XS9pdGVtc1thdDAxMTBdIE5PVCBQUk9DRVNTRUQgLS0+
+PCEtLSBTTE9UIElOIC9wcm90b2NvbFthdDAwMDRdL2l0ZW1zW2F0MDExN10gTk9UIFBST0NFU1NF
+RCAtLT4KICAgICAgPC9wcm90b2NvbD4KICAgICAgPGRhdGEgYXJjaGV0eXBlX25vZGVfaWQ9ImF0
+MDAwMSIgeHNpOnR5cGU9IkhJU1RPUlkiPgogICAgICAgIDxuYW1lPgogICAgICAgICAgPHZhbHVl
+PkV2ZW50IFNlcmllczwvdmFsdWU+CiAgICAgICAgPC9uYW1lPgogICAgICAgIDxvcmlnaW4geHNp
+OnR5cGU9IkRWX0RBVEVfVElNRSI+CiAgICAgICAgICA8dmFsdWU+MjAxODA3MTJUMTg1OTE4LDIx
+Ny0wMzAwPC92YWx1ZT4KICAgICAgICA8L29yaWdpbj4KICAgICAgICA8ZXZlbnRzIGFyY2hldHlw
+ZV9ub2RlX2lkPSJhdDAwMDIiIHhzaTp0eXBlPSJQT0lOVF9FVkVOVCI+CiAgICAgICAgICA8bmFt
+ZT4KICAgICAgICAgICAgPHZhbHVlPkFueSBldmVudDwvdmFsdWU+CiAgICAgICAgICA8L25hbWU+
+CiAgICAgICAgICA8dGltZSB4c2k6dHlwZT0iRFZfREFURV9USU1FIj4KICAgICAgICAgICAgPHZh
+bHVlPjIwMTgwNzEyVDE4NTkxOCwyMjMtMDMwMDwvdmFsdWU+CiAgICAgICAgICA8L3RpbWU+CiAg
+ICAgICAgICA8ZGF0YSBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAzIiB4c2k6dHlwZT0iSVRFTV9U
+UkVFIj4KICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgPHZhbHVlPlRyZWU8L3ZhbHVl
+PgogICAgICAgICAgICA8L25hbWU+CiAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9p
+ZD0iYXQwMDA1LjEiIHhzaTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgICAgICA8bmFtZT4KICAg
+ICAgICAgICAgICAgIDx2YWx1ZT4hIC0gVGVzdCBuYW1lPC92YWx1ZT4KICAgICAgICAgICAgICA8
+L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAg
+ICAgICAgICAgICAgIDx2YWx1ZT5aQVlzbldic3VveUFFTnBFY3lDcHdHZkpxTHEsbFQ8L3ZhbHVl
+PgogICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgIDx0ZXJt
+aW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgICA8dmFsdWU+TE9JTkM8L3ZhbHVlPgogICAg
+ICAgICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICA8Y29kZV9z
+dHJpbmc+MTAwNzAxNTwvY29kZV9zdHJpbmc+CiAgICAgICAgICAgICAgICA8L2RlZmluaW5nX2Nv
+ZGU+CiAgICAgICAgICAgICAgPC92YWx1ZT4KICAgICAgICAgICAgPC9pdGVtcz48IS0tIFNMT1Qg
+SU4gL2RhdGFbYXQwMDAxXS9ldmVudHNbYXQwMDAyXS9kYXRhW2F0MDAwM10vaXRlbXNbYXQwMDY1
+XSBOT1QgUFJPQ0VTU0VEIC0tPgogICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9
+ImF0MDA3My4xIiB4c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAg
+ICAgICAgICAgICA8dmFsdWU+ISAtIFRlc3Qgc3RhdHVzPC92YWx1ZT4KICAgICAgICAgICAgICA8
+L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAg
+ICAgICAgICAgICAgIDx2YWx1ZT5SZWdpc3RlcmVkPC92YWx1ZT4KICAgICAgICAgICAgICAgIDxk
+ZWZpbmluZ19jb2RlPgogICAgICAgICAgICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAg
+ICAgICAgICAgICAgPHZhbHVlPmxvY2FsPC92YWx1ZT4KICAgICAgICAgICAgICAgICAgPC90ZXJt
+aW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgPGNvZGVfc3RyaW5nPmF0MDEwNzwvY29kZV9z
+dHJpbmc+CiAgICAgICAgICAgICAgICA8L2RlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgPC92
+YWx1ZT4KICAgICAgICAgICAgPC9pdGVtcz4KICAgICAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9u
+b2RlX2lkPSJhdDAwNzUiIHhzaTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgICAgICA8bmFtZT4K
+ICAgICAgICAgICAgICAgIDx2YWx1ZT5UZXN0IHN0YXR1cyB0aW1lc3RhbXA8L3ZhbHVlPgogICAg
+ICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRWX0RBVEVf
+VElNRSI+CiAgICAgICAgICAgICAgICA8dmFsdWU+MjAxODA3MTJUMTg1OTE4LDI0OC0wMzAwPC92
+YWx1ZT4KICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0ZW1zPgogICAgICAg
+ICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA3NyIgeHNpOnR5cGU9IkVMRU1FTlQi
+PgogICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPkRpYWdub3N0aWMg
+c2VydmljZSBjYXRlZ29yeTwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAg
+ICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfVEVYVCI+CiAgICAgICAgICAgICAgICA8dmFsdWU+V053
+UUdMRnZqYWhDSHBhaUp6akl6RE8uQ3RWUWxMYndoU1Rsckx3ZHlIeVlwa2NJUGRjUXVtIEZ3LEpW
+VlF2V2RGWldpLmFDSEJlbEVmYmRkUWFqZWkgV3pJR1FiVkZHU2dhYWssc3FmYmV1bHFTUU1kd2Yu
+a3ouVURnZ0RQbVpTb3VGd0RtR1NkdixiT1piZk93cHdiUFpHeWJnTVNubUJVVmxNT2dneE1zUktN
+WHJGbCx6aUhDcnNoQVhBRXRsSCBidmRrQiB4RWNaTmx6ZlRmTlJ5bXltSE9HV1RGVEFyamtoSmd6
+WWlYIG13TEJGWUZNSFFIUHRGdXNXcHFiPC92YWx1ZT4KICAgICAgICAgICAgICA8L3ZhbHVlPgog
+ICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9
+ImF0MDEwMCIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAgICAgIDxuYW1lPgogICAgICAg
+ICAgICAgICAgPHZhbHVlPkNsaW5pY2FsIGluZm9ybWF0aW9uIHByb3ZpZGVkPC92YWx1ZT4KICAg
+ICAgICAgICAgICA8L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9URVhU
+Ij4KICAgICAgICAgICAgICAgIDx2YWx1ZT51VFdzYWJmWmV6c2JIYXFOdFh5SGJWWnNWVGttRVdm
+ZVpiSVdQY0xXb2d1VVRZYWp1VS5zSlZRQlhMWG5mSlRWVlhOdmRBQix6Lmd0S05ZR1VMYVRQLHNV
+a1R3SCBXZHNvY2hDUFFkUW5wY1hBYlZHbEtDdUZqQnYuWmlWVHhwUCxoYXhZSU9rdkJDc0tMSVJs
+UWhhYW54RlosaE9HdiBGWmVQSFlDZS53LlNlTmxxLlB0UE1RbkxRaUpnVlRDWkFILHdaeU9VRk9Z
+U25tenpWc2RhcXR3WEVjUGRPSFdDLHdtdVBqUFVWVFlCVyxwR0JtVlFGSHVRSGVIY0lDcHc8L3Zh
+bHVlPgogICAgICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgICAgIDwvaXRlbXM+CiAgICAgICAg
+ICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0ib3BlbkVIUi1FSFItQ0xVU1RFUi5sYWJvcmF0
+b3J5X3Rlc3RfYW5hbHl0ZS1jb2RlZC52MCIgeHNpOnR5cGU9IkNMVVNURVIiPgogICAgICAgICAg
+ICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPkxhYm9yYXRvcnkgdGVzdCBhbmFseXRl
+ITwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgIDxpdGVtcyBhcmNo
+ZXR5cGVfbm9kZV9pZD0iYXQwMDI0LjEiIHhzaTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgICAg
+ICAgIDxuYW1lPgogICAgICAgICAgICAgICAgICA8dmFsdWU+ISAtIEFuYWx5dGUgbmFtZTwvdmFs
+dWU+CiAgICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWUgeHNpOnR5
+cGU9IkRWX0NPREVEX1RFWFQiPgogICAgICAgICAgICAgICAgICA8dmFsdWU+dCBOQVBZTlNRQnBr
+LGZzUUMsR0NscGZrIFVFRXFrPC92YWx1ZT4KICAgICAgICAgICAgICAgICAgPGRlZmluaW5nX2Nv
+ZGU+CiAgICAgICAgICAgICAgICAgICAgPHRlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAg
+ICAgICAgPHZhbHVlPkxPSU5DPC92YWx1ZT4KICAgICAgICAgICAgICAgICAgICA8L3Rlcm1pbm9s
+b2d5X2lkPgogICAgICAgICAgICAgICAgICAgIDxjb2RlX3N0cmluZz4xMDAyMjI3PC9jb2RlX3N0
+cmluZz4KICAgICAgICAgICAgICAgICAgPC9kZWZpbmluZ19jb2RlPgogICAgICAgICAgICAgICAg
+PC92YWx1ZT4KICAgICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICAgIDxpdGVtcyBhcmNo
+ZXR5cGVfbm9kZV9pZD0iYXQwMDAxIiB4c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAg
+ICA8bmFtZT4KICAgICAgICAgICAgICAgICAgPHZhbHVlPkFuYWx5dGUgcmVzdWx0PC92YWx1ZT4K
+ICAgICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0i
+RFZfUVVBTlRJVFkiPgogICAgICAgICAgICAgICAgICA8bWFnbml0dWRlPjE3NC4yNzEzNDUxMzg1
+NDk4PC9tYWduaXR1ZGU+CiAgICAgICAgICAgICAgICAgIDx1bml0cz5fbm9fY29uc3RyYWludF9k
+ZWZpbmVkXzwvdW5pdHM+CiAgICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICAgIDwv
+aXRlbXM+CiAgICAgICAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDMiIHhz
+aTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAg
+ICA8dmFsdWU+Q29tbWVudDwvdmFsdWU+CiAgICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAg
+ICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRWX1RFWFQiPgogICAgICAgICAgICAgICAgICA8dmFs
+dWU+ckVEVFBUWGVXeFBqaEMuT2dZaGhEQix5IHcsLGxUbmFsR3lwQXRPWUZlZyBMTURXdm1uaEZh
+d1B0dlp5Q2xQIGtidnFqS3FtTXZMUU9tQml0U0dUVU9WaiBQYnJ1SlJZQlFraEFoT3BoSGtLYlRi
+V0J1Q0diT3BkRVdObW5ITXN6Z3Zqc0dxcmpDb0hvZUdoTXZhc1RZbi55dmdvcWZubHhycHdNZW1W
+d1YgTGNDdUxIQWZWRnp1ZWtIbEpyYm10Vm5iWmdqUnZwV1pMZGkuZEVKTVdrUURITkwgTWpJZCBa
+d3lZay5CR3JxamtUQU5taWxGV3NhT25xdEdPYUlaPC92YWx1ZT4KICAgICAgICAgICAgICAgIDwv
+dmFsdWU+CiAgICAgICAgICAgICAgPC9pdGVtcz4KICAgICAgICAgICAgICA8aXRlbXMgYXJjaGV0
+eXBlX25vZGVfaWQ9ImF0MDAwNCIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAgICAgICAg
+PG5hbWU+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5SZWZlcmVuY2UgcmFuZ2UgZ3VpZGFuY2U8
+L3ZhbHVlPgogICAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlIHhz
+aTp0eXBlPSJEVl9URVhUIj4KICAgICAgICAgICAgICAgICAgPHZhbHVlPmJHa25rSFdab1FLemFy
+T0h5anhCbktrYiBjdS5lUnpNYS55akNaRXJpU0JrT0JJcG1tLkl2Q0xRQWtZaXEgenFxampNYWZX
+LEZUWG9McWRMSUx6LGtKY1hEaUdnSXNrSGtQbXdDYktBby5MY1hSbXNHamNyd2ZXQlZEdXhudVBN
+IEdRT0ZUb1pkWGJkY0d4LC5uVyBTSmQgZmdoR1dUYlVCRlVnYmFvQkogZEl0QWpna1BZZWxtRFZY
+ZVRuVk1CV0FPQ3hPaWZSZWJvSWVQZ05PbFdoZ2ZGUEhzSktURnhFUFRYQSBScm5ULiBmZUlzb1lx
+RGVncSBabHEsWEcgIDwvdmFsdWU+CiAgICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAg
+ICAgIDwvaXRlbXM+CiAgICAgICAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAw
+MDUuMSIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAg
+ICAgICAgICAgIDx2YWx1ZT4hIC0gQW5hbHl0ZSByZXN1bHQgc3RhdHVzPC92YWx1ZT4KICAgICAg
+ICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfQ09E
+RURfVEVYVCI+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5SZWdpc3RlcmVkPC92YWx1ZT4KICAg
+ICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgICAgPHRlcm1p
+bm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICAgICAgPHZhbHVlPmxvY2FsPC92YWx1ZT4KICAg
+ICAgICAgICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICAgIDxj
+b2RlX3N0cmluZz5hdDAwMTU8L2NvZGVfc3RyaW5nPgogICAgICAgICAgICAgICAgICA8L2RlZmlu
+aW5nX2NvZGU+CiAgICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICAgIDwvaXRlbXM+
+CiAgICAgICAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDYiIHhzaTp0eXBl
+PSJFTEVNRU5UIj4KICAgICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgICA8dmFs
+dWU+QW5hbHl0ZSByZXN1bHQgc3RhdHVzIHRpbWVzdGFtcDwvdmFsdWU+CiAgICAgICAgICAgICAg
+ICA8L25hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRWX0RBVEVfVElNRSI+
+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMjk3LTAzMDA8L3ZhbHVl
+PgogICAgICAgICAgICAgICAgPC92YWx1ZT4KICAgICAgICAgICAgICA8L2l0ZW1zPjwhLS0gU0xP
+VCBJTiAvaXRlbXNbYXQwMDE0XSBOT1QgUFJPQ0VTU0VEIC0tPgogICAgICAgICAgICA8L2l0ZW1z
+PgogICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA1NyIgeHNpOnR5cGU9
+IkVMRU1FTlQiPgogICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPkNv
+bmNsdXNpb248L3ZhbHVlPgogICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICA8dmFs
+dWUgeHNpOnR5cGU9IkRWX1RFWFQiPgogICAgICAgICAgICAgICAgPHZhbHVlPnRVSVpxUkRyTFgu
+VlJ5bWlPVyxQZFJIZFBxZ0JKb2xvSHBrVndGQ2FQY0lreHF2ZENFSXZCbnFiYWJ6elFGQVdFQmhI
+RkRCUiAuVVhXcFZ6SUJESlRJaiwuYXZ0USxsRVdLYi5zLFJ4Z0RJIEJaUEJtdG9xcWZpcXNHbWMg
+ZlhhaEtjbGVkSWdnZFRhcWtua1hYTlNjS3hKd2JZaEtucVJMUGx3aURzIHdHV1pPY2FlWnl2ckJJ
+bUtJcFhpU3pWTmhCeExMdkpxRWhwb1ouZXB5cixvV1FGRmd6Y05wcEV6R1dneXNVeWFHeG9ZcC5k
+bURWTHZvRUdraUFXUGF2eTwvdmFsdWU+CiAgICAgICAgICAgICAgPC92YWx1ZT4KICAgICAgICAg
+ICAgPC9pdGVtcz4KICAgICAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwOTgi
+IHhzaTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgICAgICA8bmFtZT4KICAgICAgICAgICAgICAg
+IDx2YWx1ZT5UZXN0IGRpYWdub3NpczwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAg
+ICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfVEVYVCI+CiAgICAgICAgICAgICAgICA8dmFs
+dWU+R0lnWnRtbW14QVRqcll0VGdTIFF5R1hmZmdsYXVvcE91c2kuZlNZT3dHcmx5Q2xGIEVzVHVj
+Z1hkLnZHYVp0TGFycm5Na0FjWk9WIFN6aExNSG5ha3VkTklhWHBhampwVmVuU0lnSFVTQW5FZXl6
+TkEsV1BVcXpaLFRwbEl6eVlzYUNOR3Zoc25PIGlmZ25pbVZOSEpoY1VzbW9SREZMQ3lnR1JzVlRy
+R1pLTll6dXROWldrQmZ6SGssWlVES2VjSUlPVmZud0ZRUyxPb2ZvRGRtaWpUc2x0aU9lcHpXc1BO
+ZnZ6YURDQkJ1cVVULFp1LkpjVUpIZmtGVm5hS2VZPC92YWx1ZT4KICAgICAgICAgICAgICA8L3Zh
+bHVlPgogICAgICAgICAgICA8L2l0ZW1zPjwhLS0gU0xPVCBJTiAvZGF0YVthdDAwMDFdL2V2ZW50
+c1thdDAwMDJdL2RhdGFbYXQwMDAzXS9pdGVtc1thdDAxMThdIE5PVCBQUk9DRVNTRUQgLS0+CiAg
+ICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMTAxIiB4c2k6dHlwZT0iRUxF
+TUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWU+Q29tbWVu
+dDwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgIDx2YWx1ZSB4c2k6
+dHlwZT0iRFZfVEVYVCI+CiAgICAgICAgICAgICAgICA8dmFsdWU+bENMZEloTUt2Ty53ZENnT3F2
+d0tXUVNYZEVBVGhndHl0enRJR0xJTFVSZnhucGhWR3Nja0tIIHBYT0VPd1h1LiBaLGRJS0JqZlJ4
+VEFFQkZKSmJRUlpmb0x5S0lFY0RtUldjcU9EenpReUZEYlUuWW1BRUpYbEJVZ2NsIEUuVnNuRkJI
+a2JoQ0x2em9nZlFUWVAuTlUsZnNra0JyS0l3Qkh3SXJ0SGtCSkRVS3ZKSWNZWlBOalBnV0t0ZlNw
+dGhJTWRMY2tWZWpvSHV3WHpMdkxobHcucVF2cklTVXREbVYgWFQsdyxGS2xIUEZtQldvdkF3dnFH
+ZVF3c1MgaVpmPC92YWx1ZT4KICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0
+ZW1zPgogICAgICAgICAgPC9kYXRhPgogICAgICAgICAgPHN0YXRlIGFyY2hldHlwZV9ub2RlX2lk
+PSJhdDAxMTIiIHhzaTp0eXBlPSJJVEVNX1RSRUUiPgogICAgICAgICAgICA8bmFtZT4KICAgICAg
+ICAgICAgICA8dmFsdWU+VHJlZTwvdmFsdWU+CiAgICAgICAgICAgIDwvbmFtZT48IS0tIFNMT1Qg
+SU4gL2RhdGFbYXQwMDAxXS9ldmVudHNbYXQwMDAyXS9zdGF0ZVthdDAxMTJdL2l0ZW1zW2F0MDEx
+NF0gTk9UIFBST0NFU1NFRCAtLT4KICAgICAgICAgIDwvc3RhdGU+CiAgICAgICAgPC9ldmVudHM+
+CiAgICAgIDwvZGF0YT4KICAgIDwvY29udGVudD4KICA8L2RhdGE+CiAgPGxpZmVjeWNsZV9zdGF0
+ZT4KICAgIDx2YWx1ZT5jb21wbGV0ZTwvdmFsdWU+CiAgICA8ZGVmaW5pbmdfY29kZT4KICAgICAg
+PHRlcm1pbm9sb2d5X2lkPgogICAgICAgIDx2YWx1ZT5vcGVuZWhyPC92YWx1ZT4KICAgICAgPC90
+ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPjUzMjwvY29kZV9zdHJpbmc+CiAgICA8
+L2RlZmluaW5nX2NvZGU+CiAgPC9saWZlY3ljbGVfc3RhdGU+CjwvdmVyc2lvbj4KPC92ZXJzaW9u
+cz4=</inboundTemplate>
+        <outboundTemplate encoding="base64"></outboundTemplate>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </transformer>
+      <responseTransformer version="3.5.2">
+        <elements/>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </responseTransformer>
+      <filter version="3.5.2">
+        <elements/>
+      </filter>
+      <transportName>JavaScript Writer</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+    <connector version="3.5.2">
+      <metaDataId>2</metaDataId>
+      <name>Commit</name>
+      <properties class="com.mirth.connect.connectors.http.HttpDispatcherProperties" version="3.5.2">
+        <pluginProperties/>
+        <destinationConnectorProperties version="3.5.2">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <host>http://localhost:8090/ehr/api/v1/ehrs/${ehr_uid}/compositions</host>
+        <useProxyServer>false</useProxyServer>
+        <proxyAddress></proxyAddress>
+        <proxyPort></proxyPort>
+        <method>post</method>
+        <headers class="linked-hash-map">
+          <entry>
+            <string>Authorization</string>
+            <list>
+              <string>Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFwaWtleWFjcm9mbWNnaGZrbWZyZ2Nsa2h5bmJtanpicXVjc2RkaGlsZXZhcnBmZ3p3ZnFzd2Z3IiwiZXh0cmFkYXRhIjp7Im9yZ2FuaXphdGlvbiI6IjEyMzQ1NiIsIm9yZ191aWQiOiJlOWQxMzI5NC1iY2U3LTQ0ZTctOTYzNS04ZTkwNmRhMGM5MTQifSwiaXNzdWVkX2F0IjoiMjAxOC0wNy0xNFQwMjozMDozMi4zNDNaIn0=.pZ42qJU64z9QuhwXEUiOUoaT4tBzozBhqGdojbAAoqg=</string>
+            </list>
+          </entry>
+        </headers>
+        <parameters class="linked-hash-map">
+          <entry>
+            <string>auditCommitter</string>
+            <list>
+              <string>${performer_name}</string>
+            </list>
+          </entry>
+          <entry>
+            <string>auditSystemId</string>
+            <list>
+              <string>MIRTH</string>
+            </list>
+          </entry>
+        </parameters>
+        <responseXmlBody>false</responseXmlBody>
+        <responseParseMultipart>true</responseParseMultipart>
+        <responseIncludeMetadata>false</responseIncludeMetadata>
+        <responseBinaryMimeTypes></responseBinaryMimeTypes>
+        <responseBinaryMimeTypesRegex>false</responseBinaryMimeTypesRegex>
+        <multipart>false</multipart>
+        <useAuthentication>false</useAuthentication>
+        <authenticationType>Basic</authenticationType>
+        <usePreemptiveAuthentication>false</usePreemptiveAuthentication>
+        <username></username>
+        <password></password>
+        <content>${message.encodedData}</content>
+        <contentType>text/xml</contentType>
+        <dataTypeBinary>false</dataTypeBinary>
+        <charset>UTF-8</charset>
+        <socketTimeout>30000</socketTimeout>
+      </properties>
+      <transformer version="3.5.2">
+        <elements/>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </transformer>
+      <responseTransformer version="3.5.2">
+        <elements/>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </responseTransformer>
+      <filter version="3.5.2">
+        <elements/>
+      </filter>
+      <transportName>HTTP Sender</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>// Modify the message variable below to pre process data
+return message;</preprocessingScript>
+  <postprocessingScript>// This script executes once after a message has been processed
+// Responses returned from here will be stored as &quot;Postprocessor&quot; in the response map
+return;</postprocessingScript>
+  <deployScript>// This script executes once when the channel is deployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</deployScript>
+  <undeployScript>// This script executes once when the channel is undeployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</undeployScript>
+  <properties version="3.5.2">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>false</storeAttachments>
+    <metaDataColumns>
+      <metaDataColumn>
+        <name>SOURCE</name>
+        <type>STRING</type>
+        <mappingName>mirth_source</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>TYPE</name>
+        <type>STRING</type>
+        <mappingName>mirth_type</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>VERSION</name>
+        <type>STRING</type>
+        <mappingName>mirth_version</mappingName>
+      </metaDataColumn>
+    </metaDataColumns>
+    <attachmentProperties version="3.5.2">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+    <resourceIds class="linked-hash-map">
+      <entry>
+        <string>Default Resource</string>
+        <string>[Default Resource]</string>
+      </entry>
+    </resourceIds>
+  </properties>
+  <exportData>
+    <metadata>
+      <enabled>true</enabled>
+      <lastModified>
+        <time>1531536010977</time>
+        <timezone>America/Montevideo</timezone>
+      </lastModified>
+      <pruningSettings>
+        <archiveEnabled>true</archiveEnabled>
+      </pruningSettings>
+    </metadata>
+    <channelTags/>
+  </exportData>
+</channel>

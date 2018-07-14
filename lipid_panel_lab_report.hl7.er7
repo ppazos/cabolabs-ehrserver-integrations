@@ -1,0 +1,12 @@
+MSH|^~\&|^CCHITLabs^L-CL|^CCHIT^L-CL|^^|^^|20100407121000||ORU^R01^ORU_R01|20100407121000|P|2.5.1|0001||AL||||MT-ORU-2_R1 
+PID|1|12|00000333^^^^AN||Grayson^Jim^^^^^L||19430309|M|||834 Ocean Vista Avenue^Apt. 202^Santa Monica^CA^90401||3105552233 
+ORC|RE|||3^EHR-System 
+OBR|1|3^EHR-System|LAB003^^CCHIT^L-CL|087-0714^Lipid Panel, Serum^99Lab^80061^Lipid Panel, Serum^C4|||20100407151000||||L|||||PRO1000#^Butler^Internist^E^^Dr^MD^^^^^^EI||||RO||20100407121000|||F 
+OBX|1|NM|13457-7^LDL Cholesterol^LN||90|mg/dL|< 99||||F|||||^DOE^JOHN|||||||AccuLabs^^^^^CLIA^^^^10D987432|432 Administration Ave.^^St. Louis^MO^63146|^Smith^John^^^Dr.^MD
+NTE|0|L|
+OBX|2|NM|14646-4^HDL Cholesterol^LN||60|mg/dL|40-59|H|||F|||||^DOE^JOHN|||||||AccuLabs^^^^^CLIA^^^^10D987432|432 Administration Ave.^^St. Louis^MO^63146|^Smith^John^^^Dr.^MD
+NTE|0|L|
+OBX|3|NM|14647-2^Total Cholesterol^LN||120|mg/dL|< 199||||F|||||^DOE^JOHN|||||||AccuLabs^^^^^CLIA^^^^10D987432|432 Administration Ave.^^St. Louis^MO^63146|^Smith^John^^^Dr.^MD
+NTE|0|L|
+OBX|4|NM|14927-8^Triglycerides^LN||100|mg/dL|< 149||||F|||||^DOE^JOHN|||||||AccuLabs^^^^^CLIA^^^^10D987432|432 Administration Ave.^^St. Louis^MO^63146|^Smith^John^^^Dr.^MD
+NTE|0|L|
