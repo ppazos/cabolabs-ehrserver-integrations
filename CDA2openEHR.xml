@@ -1,0 +1,607 @@
+<channel version="3.5.2">
+  <id>21929eef-2bea-4618-b804-2faaf91f948a</id>
+  <nextMetaDataId>2</nextMetaDataId>
+  <name>CDA2openEHR</name>
+  <description></description>
+  <revision>28</revision>
+  <sourceConnector version="3.5.2">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.http.HttpReceiverProperties" version="3.5.2">
+      <pluginProperties>
+        <com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties version="3.5.2">
+  <authType>NONE</authType>
+        </com.mirth.connect.plugins.httpauth.NoneHttpAuthProperties>
+      </pluginProperties>
+      <listenerConnectorProperties version="3.5.2">
+        <host>0.0.0.0</host>
+        <port>7895</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="3.5.2">
+        <responseVariable>None</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <resourceIds class="linked-hash-map">
+          <entry>
+            <string>Default Resource</string>
+            <string>[Default Resource]</string>
+          </entry>
+        </resourceIds>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <xmlBody>false</xmlBody>
+      <parseMultipart>false</parseMultipart>
+      <includeMetadata>false</includeMetadata>
+      <binaryMimeTypes></binaryMimeTypes>
+      <binaryMimeTypesRegex>false</binaryMimeTypesRegex>
+      <responseContentType>text/plain</responseContentType>
+      <responseDataTypeBinary>false</responseDataTypeBinary>
+      <responseStatusCode></responseStatusCode>
+      <responseHeaders class="linked-hash-map"/>
+      <charset>UTF-8</charset>
+      <contextPath></contextPath>
+      <timeout>0</timeout>
+      <staticResources/>
+    </properties>
+    <transformer version="3.5.2">
+      <elements>
+        <com.mirth.connect.plugins.mapper.MapperStep>
+          <name>ehr_uid</name>
+          <sequenceNumber>0</sequenceNumber>
+          <variable>ehr_uid</variable>
+          <mapping>sourceMap.get(&apos;parameters&apos;).get(&apos;ehr_uid&apos;)</mapping>
+          <defaultValue></defaultValue>
+          <replacements/>
+          <scope>CHANNEL</scope>
+        </com.mirth.connect.plugins.mapper.MapperStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>performer_name</name>
+          <sequenceNumber>1</sequenceNumber>
+          <script>var parts = msg.*::author.*::assignedAuthor.*::assignedPerson.*::name.children();
+var performer_name = &apos;&apos;;
+for each (part in parts)
+{
+   performer_name += part.text() +&apos; &apos;;
+}
+
+channelMap.put(&apos;performer_name&apos;, performer_name);</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map CLUSTER analytes</name>
+          <sequenceNumber>2</sequenceNumber>
+          <script>/*
+default xml namespace = &quot;urn:hl7-org:v3&quot;;
+*/
+
+logger.info(msg.*::author.*::assignedAuthor.*::assignedPerson.*::name.text());
+logger.info(msg.*::author.*::assignedAuthor.*::assignedPerson.*::name.children());
+logger.info(msg.*::author.*::assignedAuthor.*::assignedPerson.*::name.children().text());
+
+// solves all NS issues!
+default xml namespace = &quot;http://schemas.openehr.org/v1&quot;;
+
+// access analyte result CLUSTER from outbound template
+var analyte_cluster = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4];
+
+// TODO: to be more generic generate the number of observations-1 that come on the inbound message
+// generates 3 more analyte structures from the one on the template
+for (var i = 1; i &lt;= 3; i++)
+{
+   // to add a sibling of the analyte, the object to call &quot;insert&quot; on
+   // should be the parent of the sibling to be added, and it&apos;s the
+   // parent of the node to add the sibling after it
+   analyte_cluster.parent().insertChildAfter(analyte_cluster, analyte_cluster.copy());
+}
+
+/*
+logger.info(msg);
+logger.info(msg.*::component);
+logger.info(msg.*::component.*::structuredBody);
+logger.info(msg.*::component.*::structuredBody.*::component);
+logger.info(msg.*::component.*::structuredBody.*::component.*::section);
+logger.info(msg.*::component.*::structuredBody.*::component.*::section.*::entry);
+*/
+
+var observation, analyte_idx = 0;
+for each (res in msg.*::component.*::structuredBody.*::component.*::section.*::entry)
+{
+logger.info(res);
+
+   // ANALYTE NAME
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;name&apos;][&apos;value&apos;] = res.*::observation.*::code.@displayName.toString();
+
+   // LOINC NAME, CODE
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = res.*::observation.*::code.@displayName.toString();
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][0][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = res.*::observation.*::code.@code.toString();
+
+   // ANALYTE RESULT QTY VALUE, UNITS
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][1][&apos;value&apos;][&apos;magnitude&apos;] = res.*::observation.*::value.@value.toString();
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][1][&apos;value&apos;][&apos;units&apos;] = res.*::observation.*::value.@unit.toString();
+
+   // don&apos;t have info about the status on the inbound message so all is marked as final
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0018&apos;;
+   tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][4+analyte_idx][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+
+   analyte_idx++;
+}</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map OBSERVATION result</name>
+          <sequenceNumber>3</sequenceNumber>
+          <script>// Observation time
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;] = DateUtil.convertDate(&quot;yyyyMMddHHmmssX&quot;, &quot;yyyyMMdd&apos;T&apos;HHmmssZ&quot;, msg.*::effectiveTime.@value.toString());
+
+// Event time (same as observation)
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
+
+// Panel name and code, mapped to section code
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = msg.*::component.*::structuredBody.*::component.*::section.*::code.@displayName.toString();
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = msg.*::component.*::structuredBody.*::component.*::section.*::code.@code.toString();
+
+// don&apos;t have info about the whole status on the inbound CDA, so it is set as final
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;defining_code&apos;][&apos;code_string&apos;] = &apos;at0038&apos;;
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = &apos;Final&apos;;
+
+// Test status timestamp = OBSERVATION time
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][2][&apos;value&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
+
+// Category (free text, we can code it but need to change the archetype)
+// We don&apos;t have information about the service category on the inbound CDA, we remove the node
+//tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][3][&apos;value&apos;][&apos;value&apos;] = ?
+
+delete tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][2];
+
+
+// TODO: we need to add some test id on the CDA
+// Test id on protocol
+//tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;protocol&apos;][&apos;items&apos;][&apos;value&apos;][&apos;type&apos;] = msg[&apos;identifier&apos;][0][&apos;system&apos;];
+//tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;protocol&apos;][&apos;items&apos;][&apos;value&apos;][&apos;id&apos;] = msg[&apos;identifier&apos;][0][&apos;value&apos;];</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map COMPOSITION document</name>
+          <sequenceNumber>4</sequenceNumber>
+          <script>// Context start time, same as OBSERVATION time mapped before
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;start_time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
+
+// TODO
+// Other context report ID (is free text!)
+// nowhere to put the type/system = msg[&apos;identifier&apos;][0][&apos;system&apos;];
+//tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;other_context&apos;][&apos;items&apos;][0][&apos;value&apos;][&apos;value&apos;] = msg[&apos;identifier&apos;][0][&apos;value&apos;];
+
+// Other context status, same as the ELEMENT status for the whole panel mapped before
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;other_context&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;events&apos;][&apos;data&apos;][&apos;items&apos;][1][&apos;value&apos;][&apos;value&apos;];
+
+// Composer
+
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;external_ref&apos;][&apos;type&apos;] = &apos;PERSON&apos;;
+
+// ID of performer
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;external_ref&apos;][&apos;id&apos;][&apos;value&apos;] = msg.*::author.*::assignedAuthor.*::id.@root.toString() +&apos;::&apos;+ msg.*::author.*::assignedAuthor.*::id.@extension.toString();
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;composer&apos;][&apos;name&apos;] = $(&apos;performer_name&apos;);</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+          <name>Map VERSION values</name>
+          <sequenceNumber>5</sequenceNumber>
+          <script>// TODO</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+      </elements>
+      <inboundTemplate encoding="base64">PD94bWwgdmVyc2lvbiA9ICIxLjAiIGVuY29kaW5nPSJJU08tODg1OS0xIj8+CjxDbGluaWNhbERv
+Y3VtZW50IHhtbG5zPSJ1cm46aGw3LW9yZzp2MyIgeG1sbnM6dm9jPSJ1cm46aGw3LW9yZzp2My92
+b2MiIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2Ui
+PgogIDx0eXBlSWQgZXh0ZW5zaW9uPSJQT0NEX0hEMDAwMDQwIiByb290PSIyLjE2Ljg0MC4xLjEx
+Mzg4My4xLjMiLz4KICA8aWQgcm9vdD0iZGI3MzQ2NDctZmM5OS00MjRjLWE4NjQtN2UzY2RhODJl
+NzAzIi8+CiAgPGNvZGUgY29kZT0iNDcwNDUtMCAiIGNvZGVTeXN0ZW09IjIuMTYuODQwLjEuMTEz
+ODgzLjYuMSIgY29kZVN5c3RlbU5hbWU9IkxPSU5DIiBkaXNwbGF5TmFtZT0iU3R1ZHkgcmVwb3J0
+IiAvPgogIDx0aXRsZT5TdHVkeSByZXBvcnQ8L3RpdGxlPgogIDxlZmZlY3RpdmVUaW1lIHZhbHVl
+PSIyMDEyMTIyNDA5MzAwMC0wMzAwIi8+CiAgPGNvbmZpZGVudGlhbGl0eUNvZGUgY29kZT0iTiIg
+Y29kZVN5c3RlbT0iMi4xNi44NDAuMS4xMTM4ODMuNS4yNSIvPgogIDxsYW5ndWFnZUNvZGUgY29k
+ZT0iZW4tVVMiLz4KICA8cmVjb3JkVGFyZ2V0PgogICAgPHBhdGllbnRSb2xlPgogICAgICA8aWQg
+ZXh0ZW5zaW9uPSI0MTE2MjM4LTAiIHJvb3Q9IjIuMTYuODU4LjEuODU4LjY4OTA5IiAvPgogICAg
+ICA8YWRkcj4KICAgICAgICA8c3RhdGU+TW9udGV2aWRlbzwvc3RhdGU+CiAgICAgICAgPGNpdHk+
+TW9udGV2aWRlbzwvY2l0eT4KICAgICAgICA8Y291bnRyeT5VWTwvY291bnRyeT4KICAgICAgPC9h
+ZGRyPgogICAgICA8dGVsZWNvbSB2YWx1ZT0ibWFpbHRvOnBhYmxvLnBhem9zQGNhYm9sYWJzLmNv
+bSIgLz4KICAgICAgPHBhdGllbnQ+CiAgICAgICAgPG5hbWU+CiAgICAgICAgICA8Z2l2ZW4+UGFi
+bG88L2dpdmVuPgogICAgICAgICAgPGdpdmVuPkZlZGVyaWNvPC9naXZlbj4KICAgICAgICAgIDxm
+YW1pbHk+UGF6b3M8L2ZhbWlseT4KICAgICAgICAgIDxmYW1pbHk+R3V0acOpcnJlejwvZmFtaWx5
+PgogICAgICAgIDwvbmFtZT4KICAgICAgICA8YWRtaW5pc3RyYXRpdmVHZW5kZXJDb2RlIGNvZGU9
+Ik0iIGNvZGVTeXN0ZW09IjIuMTYuODQwLjEuMTEzODgzLjUuMSIgLz4KICAgICAgICA8YmlydGhU
+aW1lIHZhbHVlPSIxOTgxMTAyNCIgLz4KICAgICAgPC9wYXRpZW50PgogICAgPC9wYXRpZW50Um9s
+ZT4KICA8L3JlY29yZFRhcmdldD4KICA8YXV0aG9yPgogICAgPHRpbWUgdmFsdWU9IjIwMTMxMjMw
+MTMwMDAwLTAzMDAiLz4KICAgIDxhc3NpZ25lZEF1dGhvcj4KICAgICAgPGlkIHJvb3Q9IjIuMTYu
+ODU4LjIuMTAwMDA2NzUuNjk1ODUiIGV4dGVuc2lvbj0iMTIzNCIgLz4KICAgICAgPGFzc2lnbmVk
+UGVyc29uPgogICAgICAgIDxuYW1lPgogICAgICAgICAgPGdpdmVuPkdyZWdvcnk8L2dpdmVuPgog
+ICAgICAgICAgPGZhbWlseT5Ib3VzZTwvZmFtaWx5PgogICAgICAgIDwvbmFtZT4KICAgICAgPC9h
+c3NpZ25lZFBlcnNvbj4KICAgICAgPHJlcHJlc2VudGVkT3JnYW5pemF0aW9uPgogICAgICAgIDxp
+ZCByb290PSIyLjE2Ljg1OC4wLjAuMC4xLjEuNSIvPgogICAgICAgIDxuYW1lPkNhYm9MYWJzIEhv
+c3BpdGFsPC9uYW1lPgogICAgICA8L3JlcHJlc2VudGVkT3JnYW5pemF0aW9uPgogICAgPC9hc3Np
+Z25lZEF1dGhvcj4KICA8L2F1dGhvcj4KICA8Y3VzdG9kaWFuPgogICAgPGFzc2lnbmVkQ3VzdG9k
+aWFuPgogICAgICA8cmVwcmVzZW50ZWRDdXN0b2RpYW5Pcmdhbml6YXRpb24+CiAgICAgICAgPGlk
+IHJvb3Q9IjIuMTYuODU4LjAuMC4wLjEuMS41Ii8+CiAgICAgICAgPG5hbWU+Q2Fib0xhYnMgSG9z
+cGl0YWw8L25hbWU+CiAgICAgIDwvcmVwcmVzZW50ZWRDdXN0b2RpYW5Pcmdhbml6YXRpb24+CiAg
+ICA8L2Fzc2lnbmVkQ3VzdG9kaWFuPgogIDwvY3VzdG9kaWFuPgogIDxjb21wb25lbnQ+CiAgICA8
+c3RydWN0dXJlZEJvZHk+CiAgICAgIDxjb21wb25lbnQ+CiAgICAgICAgPHNlY3Rpb24+IAogICAg
+ICAgICAgPGNvZGUgY29kZT0iMjQzMzEtMSIgY29kZVN5c3RlbT0iMi4xNi44NDAuMS4xMTM4ODMu
+Ni4xIiBjb2RlU3lzdGVtTmFtZT0iTE9JTkMiIGRpc3BsYXlOYW1lPSJMaXBpZCBwYW5lbCIgLz4K
+ICAgICAgICAgIDx0aXRsZT5MaXBpZCBwYW5lbDwvdGl0bGU+CiAgICAgICAgICA8dGV4dD4KICAg
+ICAgICAgICAgPGxpc3Q+CiAgICAgICAgICAgICAgPGl0ZW0+Q2hvbGVzdGVyb2wgNi4zIG1tb2xk
+L0w8L2l0ZW0+CiAgICAgICAgICAgICAgPGl0ZW0+VHJpZ2x5Y2VyaWRlIDEuMyBtbW9sL0w8L2l0
+ZW0+CiAgICAgICAgICAgICAgPGl0ZW0+SERMIENob2xlc3Rlcm9sIDEuMyBtbW9sL0w8L2l0ZW0+
+CiAgICAgICAgICAgICAgPGl0ZW0+TERMIENob2xlc3Rlcm9sIDQuNiBtbW9sL0w8L2l0ZW0+CiAg
+ICAgICAgICAgIDwvbGlzdD4KICAgICAgICAgIDwvdGV4dD4KICAgICAgICAgIDxlbnRyeT4KICAg
+ICAgICAgICAgPG9ic2VydmF0aW9uIGNsYXNzQ29kZT0iT0JTIiBtb29kQ29kZT0iREVGIj4KICAg
+ICAgICAgICAgICA8Y29kZSBjb2RlPSIxNDY0Ny0yIiBjb2RlU3lzdGVtPSIyLjE2Ljg0MC4xLjEx
+Mzg4My42LjEiIGNvZGVTeXN0ZW1OYW1lPSJMT0lOQyIgZGlzcGxheU5hbWU9IkNob2xlc3Rlcm9s
+Ii8+CiAgICAgICAgICAgICAgPGVmZmVjdGl2ZVRpbWUgdmFsdWU9IjIwMDAwMzIzMTQzMCIvPgog
+ICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iUFEiIHZhbHVlPSI2LjMiIHVuaXQ9Im1tb2wv
+TCIgLz4KICAgICAgICAgICAgPC9vYnNlcnZhdGlvbj4KICAgICAgICAgIDwvZW50cnk+CiAgICAg
+ICAgICA8ZW50cnk+CiAgICAgICAgICAgIDxvYnNlcnZhdGlvbiBjbGFzc0NvZGU9Ik9CUyIgbW9v
+ZENvZGU9IkRFRiI+CiAgICAgICAgICAgICAgPGNvZGUgY29kZT0iMTQ5MjctOCIgY29kZVN5c3Rl
+bT0iMi4xNi44NDAuMS4xMTM4ODMuNi4xIiBjb2RlU3lzdGVtTmFtZT0iTE9JTkMiIGRpc3BsYXlO
+YW1lPSJUcmlnbHljZXJpZGUiLz4KICAgICAgICAgICAgICA8ZWZmZWN0aXZlVGltZSB2YWx1ZT0i
+MjAwMDAzMjMxNDMwIi8+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJQUSIgdmFsdWU9
+IjEuMyIgdW5pdD0ibW1vbC9MIiAvPgogICAgICAgICAgICA8L29ic2VydmF0aW9uPgogICAgICAg
+ICAgPC9lbnRyeT4KICAgICAgICAgIDxlbnRyeT4KICAgICAgICAgICAgPG9ic2VydmF0aW9uIGNs
+YXNzQ29kZT0iT0JTIiBtb29kQ29kZT0iREVGIj4KICAgICAgICAgICAgICA8Y29kZSBjb2RlPSIy
+MDg1LTkiIGNvZGVTeXN0ZW09IjIuMTYuODQwLjEuMTEzODgzLjYuMSIgY29kZVN5c3RlbU5hbWU9
+IkxPSU5DIiBkaXNwbGF5TmFtZT0iSERMIi8+CiAgICAgICAgICAgICAgPGVmZmVjdGl2ZVRpbWUg
+dmFsdWU9IjIwMDAwMzIzMTQzMCIvPgogICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iUFEi
+IHZhbHVlPSIxLjMiIHVuaXQ9Im1tb2wvTCIgLz4KICAgICAgICAgICAgPC9vYnNlcnZhdGlvbj4K
+ICAgICAgICAgIDwvZW50cnk+CiAgICAgICAgICA8ZW50cnk+CiAgICAgICAgICAgIDxvYnNlcnZh
+dGlvbiBjbGFzc0NvZGU9Ik9CUyIgbW9vZENvZGU9IkRFRiI+CiAgICAgICAgICAgICAgPGNvZGUg
+Y29kZT0iMzk0NjktMiIgY29kZVN5c3RlbT0iMi4xNi44NDAuMS4xMTM4ODMuNi4xIiBjb2RlU3lz
+dGVtTmFtZT0iTE9JTkMiIGRpc3BsYXlOYW1lPSJMREwiLz4KICAgICAgICAgICAgICA8ZWZmZWN0
+aXZlVGltZSB2YWx1ZT0iMjAwMDAzMjMxNDMwIi8+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0
+eXBlPSJQUSIgdmFsdWU9IjQuNiIgdW5pdD0ibW1vbC9MIiAvPgogICAgICAgICAgICA8L29ic2Vy
+dmF0aW9uPgogICAgICAgICAgPC9lbnRyeT4KICAgICAgICA8L3NlY3Rpb24+CiAgICAgIDwvY29t
+cG9uZW50PgogICAgPC9zdHJ1Y3R1cmVkQm9keT4KICA8L2NvbXBvbmVudD4KPC9DbGluaWNhbERv
+Y3VtZW50Pg==</inboundTemplate>
+      <outboundTemplate encoding="base64">PHZlcnNpb25zIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVuZWhyLm9yZy92MSIgeG1sbnM6eHNp
+PSJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYS1pbnN0YW5jZSI+Cjx2ZXJzaW9uIHhz
+aTp0eXBlPSJPUklHSU5BTF9WRVJTSU9OIj4KICA8Y29udHJpYnV0aW9uPgogICAgPGlkIHhzaTp0
+eXBlPSJISUVSX09CSkVDVF9JRCI+CiAgICAgIDx2YWx1ZT4wNDQzZmI5Ny03OTU1LTQ3YTUtYTQx
+NC04YmEyZTQ0NTRhNWU8L3ZhbHVlPgogICAgPC9pZD4KICAgIDxuYW1lc3BhY2U+RUhSOjpDT01N
+T048L25hbWVzcGFjZT4KICAgIDx0eXBlPkNPTlRSSUJVVElPTjwvdHlwZT4KICA8L2NvbnRyaWJ1
+dGlvbj4KICA8Y29tbWl0X2F1ZGl0PgogICAgPHN5c3RlbV9pZD5DQUJPTEFCU19FSFI8L3N5c3Rl
+bV9pZD4KICAgIDxjb21taXR0ZXIgeHNpOnR5cGU9IlBBUlRZX0lERU5USUZJRUQiPgogICAgICA8
+ZXh0ZXJuYWxfcmVmPgogICAgICAgIDxpZCB4c2k6dHlwZT0iSElFUl9PQkpFQ1RfSUQiPgogICAg
+ICAgICAgPHZhbHVlPmY3NDU4MDhjLTljZDQtNDcyYy1iMDE4LTM4YTVkMDQ4YTIwODwvdmFsdWU+
+CiAgICAgICAgPC9pZD4KICAgICAgICA8bmFtZXNwYWNlPkRFTU9HUkFQSElDPC9uYW1lc3BhY2U+
+CiAgICAgICAgPHR5cGU+UEVSU09OPC90eXBlPgogICAgICA8L2V4dGVybmFsX3JlZj4KICAgICAg
+PG5hbWU+RHIuIFlhbWFtb3RvPC9uYW1lPgogICAgPC9jb21taXR0ZXI+CiAgICA8dGltZV9jb21t
+aXR0ZWQ+CiAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMDc5LTAzMDA8L3ZhbHVlPgogICAg
+PC90aW1lX2NvbW1pdHRlZD4KICAgIDxjaGFuZ2VfdHlwZT4KICAgICAgPHZhbHVlPmNyZWF0aW9u
+PC92YWx1ZT4KICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgPHRlcm1pbm9sb2d5X2lkPgog
+ICAgICAgICAgPHZhbHVlPm9wZW5laHI8L3ZhbHVlPgogICAgICAgIDwvdGVybWlub2xvZ3lfaWQ+
+CiAgICAgICAgPGNvZGVfc3RyaW5nPjI0OTwvY29kZV9zdHJpbmc+CiAgICAgIDwvZGVmaW5pbmdf
+Y29kZT4KICAgIDwvY2hhbmdlX3R5cGU+CiAgPC9jb21taXRfYXVkaXQ+CiAgPHVpZD4KICAgIDx2
+YWx1ZT5iNDYwZTBjZi0yYzkzLTRjOWQtYjViNy0xNjk0YzUxMzQ4MWQ6OkVNUl9BUFA6OjE8L3Zh
+bHVlPgogIDwvdWlkPgogIDxkYXRhIHhzaTp0eXBlPSJDT01QT1NJVElPTiIgYXJjaGV0eXBlX25v
+ZGVfaWQ9Im9wZW5FSFItRUhSLUNPTVBPU0lUSU9OLnJlcG9ydC1yZXN1bHQudjEiPgogICAgPG5h
+bWU+CiAgICAgIDx2YWx1ZT5SZXN1bHQgUmVwb3J0PC92YWx1ZT4KICAgIDwvbmFtZT4KICAgIDxh
+cmNoZXR5cGVfZGV0YWlscz4KICAgICAgPGFyY2hldHlwZV9pZD4KICAgICAgICA8dmFsdWU+b3Bl
+bkVIUi1FSFItQ09NUE9TSVRJT04ucmVwb3J0LXJlc3VsdC52MTwvdmFsdWU+CiAgICAgIDwvYXJj
+aGV0eXBlX2lkPgogICAgICA8dGVtcGxhdGVfaWQ+CiAgICAgICAgPHZhbHVlPmxhYm9yYXRvcnlf
+cmVzdWx0c19yZXBvcnQuZW4udjE8L3ZhbHVlPgogICAgICA8L3RlbXBsYXRlX2lkPgogICAgICA8
+cm1fdmVyc2lvbj4xLjAuMjwvcm1fdmVyc2lvbj4KICAgIDwvYXJjaGV0eXBlX2RldGFpbHM+CiAg
+ICA8bGFuZ3VhZ2U+CiAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICA8dmFsdWU+SVNPXzYz
+OS0xPC92YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPmVu
+PC9jb2RlX3N0cmluZz4KICAgIDwvbGFuZ3VhZ2U+CiAgICA8dGVycml0b3J5PgogICAgICA8dGVy
+bWlub2xvZ3lfaWQ+CiAgICAgICAgPHZhbHVlPklTT18zMTY2LTE8L3ZhbHVlPgogICAgICA8L3Rl
+cm1pbm9sb2d5X2lkPgogICAgICA8Y29kZV9zdHJpbmc+VVk8L2NvZGVfc3RyaW5nPgogICAgPC90
+ZXJyaXRvcnk+CiAgICA8Y2F0ZWdvcnk+CiAgICAgIDx2YWx1ZT5ldmVudDwvdmFsdWU+CiAgICAg
+IDxkZWZpbmluZ19jb2RlPgogICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICAgIDx2YWx1
+ZT5vcGVuZWhyPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgIDxjb2Rl
+X3N0cmluZz40MzM8L2NvZGVfc3RyaW5nPgogICAgICA8L2RlZmluaW5nX2NvZGU+CiAgICA8L2Nh
+dGVnb3J5PgogICAgPGNvbXBvc2VyIHhzaTp0eXBlPSJQQVJUWV9JREVOVElGSUVEIj4KICAgICAg
+PGV4dGVybmFsX3JlZj4KICAgICAgICA8aWQgeHNpOnR5cGU9IkhJRVJfT0JKRUNUX0lEIj4KICAg
+ICAgICAgIDx2YWx1ZT44ZDlhNjI2NS1jNDQ1LTQwZGYtODNmZS0yZWE3YmNhNzdhNTM8L3ZhbHVl
+PgogICAgICAgIDwvaWQ+CiAgICAgICAgPG5hbWVzcGFjZT5ERU1PR1JBUEhJQzwvbmFtZXNwYWNl
+PgogICAgICAgIDx0eXBlPlBFUlNPTjwvdHlwZT4KICAgICAgPC9leHRlcm5hbF9yZWY+CiAgICAg
+IDxuYW1lPkRyLiBIb3VzZTwvbmFtZT4KICAgIDwvY29tcG9zZXI+CiAgICA8Y29udGV4dD4KICAg
+ICAgPHN0YXJ0X3RpbWU+CiAgICAgICAgPHZhbHVlPjIwMTgwNzEyVDE4NTkxOCwxMzctMDMwMDwv
+dmFsdWU+CiAgICAgIDwvc3RhcnRfdGltZT4KICAgICAgPHNldHRpbmc+CiAgICAgICAgPHZhbHVl
+Pkhvc3BpdGFsIEE8L3ZhbHVlPgogICAgICAgIDxkZWZpbmluZ19jb2RlPgogICAgICAgICAgPHRl
+cm1pbm9sb2d5X2lkPgogICAgICAgICAgICA8dmFsdWU+b3BlbmVocjwvdmFsdWU+CiAgICAgICAg
+ICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgPGNvZGVfc3RyaW5nPjIyOTwvY29kZV9zdHJp
+bmc+CiAgICAgICAgPC9kZWZpbmluZ19jb2RlPgogICAgICA8L3NldHRpbmc+CiAgICAgIDxvdGhl
+cl9jb250ZXh0IGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDEiIHhzaTp0eXBlPSJJVEVNX1RSRUUi
+PgogICAgICAgIDxuYW1lPgogICAgICAgICAgPHZhbHVlPlRyZWU8L3ZhbHVlPgogICAgICAgIDwv
+bmFtZT4KICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDAwMiIgeHNpOnR5cGU9
+IkVMRU1FTlQiPgogICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5SZXBvcnQgSUQ8
+L3ZhbHVlPgogICAgICAgICAgPC9uYW1lPgogICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9U
+RVhUIj4KICAgICAgICAgICAgPHZhbHVlPjwvdmFsdWU+CiAgICAgICAgICA8L3ZhbHVlPgogICAg
+ICAgIDwvaXRlbXM+CiAgICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDUiIHhz
+aTp0eXBlPSJFTEVNRU5UIj4KICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICA8dmFsdWU+U3Rh
+dHVzPC92YWx1ZT4KICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0i
+RFZfVEVYVCI+CiAgICAgICAgICAgIDx2YWx1ZT48L3ZhbHVlPgogICAgICAgICAgPC92YWx1ZT4K
+ICAgICAgICA8L2l0ZW1zPgogICAgICA8L290aGVyX2NvbnRleHQ+CiAgICA8L2NvbnRleHQ+CiAg
+ICA8Y29udGVudCBhcmNoZXR5cGVfbm9kZV9pZD0ib3BlbkVIUi1FSFItT0JTRVJWQVRJT04ubGFi
+b3JhdG9yeV90ZXN0X3Jlc3VsdC1jb2RlZC52MCIgeHNpOnR5cGU9Ik9CU0VSVkFUSU9OIj4KICAg
+ICAgPG5hbWU+CiAgICAgICAgPHZhbHVlPkxhYm9yYXRvcnkgdGVzdCByZXN1bHQ8L3ZhbHVlPgog
+ICAgICA8L25hbWU+CiAgICAgIDxsYW5ndWFnZT4KICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAg
+ICAgICAgICA8dmFsdWU+SVNPXzYzOS0xPC92YWx1ZT4KICAgICAgICA8L3Rlcm1pbm9sb2d5X2lk
+PgogICAgICAgIDxjb2RlX3N0cmluZz5lbjwvY29kZV9zdHJpbmc+CiAgICAgIDwvbGFuZ3VhZ2U+
+CiAgICAgIDxlbmNvZGluZz4KICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgICA8dmFs
+dWU+VW5pY29kZTwvdmFsdWU+CiAgICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgICA8Y29k
+ZV9zdHJpbmc+VVRGLTg8L2NvZGVfc3RyaW5nPgogICAgICA8L2VuY29kaW5nPgogICAgICA8c3Vi
+amVjdCB4c2k6dHlwZT0iUEFSVFlfU0VMRiIgLz4KICAgICAgPHByb3RvY29sIGFyY2hldHlwZV9u
+b2RlX2lkPSJhdDAwMDQiIHhzaTp0eXBlPSJJVEVNX1RSRUUiPgogICAgICAgIDxuYW1lPgogICAg
+ICAgICAgPHZhbHVlPlRyZWU8L3ZhbHVlPgogICAgICAgIDwvbmFtZT4KICAgICAgICA8aXRlbXMg
+YXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA2OCIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAg
+PG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5MYWJvcmF0b3J5IHRlc3QgaWRlbnRpZmllcjwvdmFs
+dWU+CiAgICAgICAgICA8L25hbWU+CiAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRWX0lERU5U
+SUZJRVIiPgogICAgICAgICAgICA8aXNzdWVyPkhvc3BpdGFsIGRlIENsaW5pY2FzPC9pc3N1ZXI+
+CiAgICAgICAgICAgIDxhc3NpZ25lcj5Ib3NwaXRhbCBkZSBDbGluaWNhczwvYXNzaWduZXI+CiAg
+ICAgICAgICAgIDxpZD40ODM5NDgxNjwvaWQ+CiAgICAgICAgICAgIDx0eXBlPkxPQ0FMSUQ8L3R5
+cGU+CiAgICAgICAgICA8L3ZhbHVlPgogICAgICAgIDwvaXRlbXM+CiAgICAgIDwvcHJvdG9jb2w+
+CiAgICAgIDxkYXRhIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDEiIHhzaTp0eXBlPSJISVNUT1JZ
+Ij4KICAgICAgICA8bmFtZT4KICAgICAgICAgIDx2YWx1ZT5FdmVudCBTZXJpZXM8L3ZhbHVlPgog
+ICAgICAgIDwvbmFtZT4KICAgICAgICA8b3JpZ2luIHhzaTp0eXBlPSJEVl9EQVRFX1RJTUUiPgog
+ICAgICAgICAgPHZhbHVlPjIwMTgwNzEyVDE4NTkxOCwyMTctMDMwMDwvdmFsdWU+CiAgICAgICAg
+PC9vcmlnaW4+CiAgICAgICAgPGV2ZW50cyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAyIiB4c2k6
+dHlwZT0iUE9JTlRfRVZFTlQiPgogICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgIDx2YWx1ZT5B
+bnkgZXZlbnQ8L3ZhbHVlPgogICAgICAgICAgPC9uYW1lPgogICAgICAgICAgPHRpbWUgeHNpOnR5
+cGU9IkRWX0RBVEVfVElNRSI+CiAgICAgICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQxODU5MTgsMjIz
+LTAzMDA8L3ZhbHVlPgogICAgICAgICAgPC90aW1lPgogICAgICAgICAgPGRhdGEgYXJjaGV0eXBl
+X25vZGVfaWQ9ImF0MDAwMyIgeHNpOnR5cGU9IklURU1fVFJFRSI+CiAgICAgICAgICAgIDxuYW1l
+PgogICAgICAgICAgICAgIDx2YWx1ZT5UcmVlPC92YWx1ZT4KICAgICAgICAgICAgPC9uYW1lPgog
+ICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDAwNS4xIiB4c2k6dHlwZT0i
+RUxFTUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWU+VGVz
+dCBuYW1lPC92YWx1ZT4KICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVl
+IHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgIDx2YWx1ZT48L3ZhbHVl
+PgogICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgIDx0ZXJt
+aW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgICA8dmFsdWU+TE9JTkM8L3ZhbHVlPgogICAg
+ICAgICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICA8Y29kZV9z
+dHJpbmc+PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4KICAg
+ICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICA8aXRl
+bXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA3My4xIiB4c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAg
+ICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8dmFsdWU+VGVzdCBzdGF0dXM8L3ZhbHVl
+PgogICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICA8dmFsdWUgeHNpOnR5cGU9IkRW
+X0NPREVEX1RFWFQiPgogICAgICAgICAgICAgICAgPHZhbHVlPlJlZ2lzdGVyZWQ8L3ZhbHVlPgog
+ICAgICAgICAgICAgICAgPGRlZmluaW5nX2NvZGU+CiAgICAgICAgICAgICAgICAgIDx0ZXJtaW5v
+bG9neV9pZD4KICAgICAgICAgICAgICAgICAgICA8dmFsdWU+bG9jYWw8L3ZhbHVlPgogICAgICAg
+ICAgICAgICAgICA8L3Rlcm1pbm9sb2d5X2lkPgogICAgICAgICAgICAgICAgICA8Y29kZV9zdHJp
+bmc+YXQwMTA3PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4K
+ICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICA8L2l0ZW1zPgogICAgICAgICAgICA8
+aXRlbXMgYXJjaGV0eXBlX25vZGVfaWQ9ImF0MDA3NSIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAg
+ICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPlRlc3Qgc3RhdHVzIHRpbWVz
+dGFtcDwvdmFsdWU+CiAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgIDx2YWx1ZSB4
+c2k6dHlwZT0iRFZfREFURV9USU1FIj4KICAgICAgICAgICAgICAgIDx2YWx1ZT4yMDE4MDcxMlQx
+ODU5MTgsMjQ4LTAzMDA8L3ZhbHVlPgogICAgICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgICAg
+IDwvaXRlbXM+CiAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDc3IiB4
+c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICA8
+dmFsdWU+RGlhZ25vc3RpYyBzZXJ2aWNlIGNhdGVnb3J5PC92YWx1ZT4KICAgICAgICAgICAgICA8
+L25hbWU+CiAgICAgICAgICAgICAgPHZhbHVlIHhzaTp0eXBlPSJEVl9URVhUIj4KICAgICAgICAg
+ICAgICAgIDx2YWx1ZT48L3ZhbHVlPgogICAgICAgICAgICAgIDwvdmFsdWU+CiAgICAgICAgICAg
+IDwvaXRlbXM+CiAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0ib3BlbkVIUi1F
+SFItQ0xVU1RFUi5sYWJvcmF0b3J5X3Rlc3RfYW5hbHl0ZS1jb2RlZC52MCIgeHNpOnR5cGU9IkNM
+VVNURVIiPgogICAgICAgICAgICAgIDxuYW1lPgogICAgICAgICAgICAgICAgPHZhbHVlPkxhYm9y
+YXRvcnkgdGVzdCBhbmFseXRlPC92YWx1ZT4KICAgICAgICAgICAgICA8L25hbWU+CiAgICAgICAg
+ICAgICAgPGl0ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMjQuMSIgeHNpOnR5cGU9IkVMRU1F
+TlQiPgogICAgICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFs
+eXRlIG5hbWU8L3ZhbHVlPgogICAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgICAg
+PHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgICAgPHZhbHVl
+PjwvdmFsdWU+CiAgICAgICAgICAgICAgICAgIDxkZWZpbmluZ19jb2RlPgogICAgICAgICAgICAg
+ICAgICAgIDx0ZXJtaW5vbG9neV9pZD4KICAgICAgICAgICAgICAgICAgICAgIDx2YWx1ZT5MT0lO
+QzwvdmFsdWU+CiAgICAgICAgICAgICAgICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgICAg
+ICAgICAgICAgICA8Y29kZV9zdHJpbmc+PC9jb2RlX3N0cmluZz4KICAgICAgICAgICAgICAgICAg
+PC9kZWZpbmluZ19jb2RlPgogICAgICAgICAgICAgICAgPC92YWx1ZT4KICAgICAgICAgICAgICA8
+L2l0ZW1zPgogICAgICAgICAgICAgIDxpdGVtcyBhcmNoZXR5cGVfbm9kZV9pZD0iYXQwMDAxIiB4
+c2k6dHlwZT0iRUxFTUVOVCI+CiAgICAgICAgICAgICAgICA8bmFtZT4KICAgICAgICAgICAgICAg
+ICAgPHZhbHVlPkFuYWx5dGUgcmVzdWx0PC92YWx1ZT4KICAgICAgICAgICAgICAgIDwvbmFtZT4K
+ICAgICAgICAgICAgICAgIDx2YWx1ZSB4c2k6dHlwZT0iRFZfUVVBTlRJVFkiPgogICAgICAgICAg
+ICAgICAgICA8bWFnbml0dWRlPjE3NC4yNzEzNDUxMzg1NDk4PC9tYWduaXR1ZGU+CiAgICAgICAg
+ICAgICAgICAgIDx1bml0cz5fbm9fY29uc3RyYWludF9kZWZpbmVkXzwvdW5pdHM+CiAgICAgICAg
+ICAgICAgICA8L3ZhbHVlPgogICAgICAgICAgICAgIDwvaXRlbXM+CiAgICAgICAgICAgICAgPGl0
+ZW1zIGFyY2hldHlwZV9ub2RlX2lkPSJhdDAwMDUuMSIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAg
+ICAgICAgICAgICAgPG5hbWU+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFseXRlIHJlc3Vs
+dCBzdGF0dXM8L3ZhbHVlPgogICAgICAgICAgICAgICAgPC9uYW1lPgogICAgICAgICAgICAgICAg
+PHZhbHVlIHhzaTp0eXBlPSJEVl9DT0RFRF9URVhUIj4KICAgICAgICAgICAgICAgICAgPHZhbHVl
+PlJlZ2lzdGVyZWQ8L3ZhbHVlPgogICAgICAgICAgICAgICAgICA8ZGVmaW5pbmdfY29kZT4KICAg
+ICAgICAgICAgICAgICAgICA8dGVybWlub2xvZ3lfaWQ+CiAgICAgICAgICAgICAgICAgICAgICA8
+dmFsdWU+bG9jYWw8L3ZhbHVlPgogICAgICAgICAgICAgICAgICAgIDwvdGVybWlub2xvZ3lfaWQ+
+CiAgICAgICAgICAgICAgICAgICAgPGNvZGVfc3RyaW5nPmF0MDAxNTwvY29kZV9zdHJpbmc+CiAg
+ICAgICAgICAgICAgICAgIDwvZGVmaW5pbmdfY29kZT4KICAgICAgICAgICAgICAgIDwvdmFsdWU+
+CiAgICAgICAgICAgICAgPC9pdGVtcz4KICAgICAgICAgICAgICA8aXRlbXMgYXJjaGV0eXBlX25v
+ZGVfaWQ9ImF0MDAwNiIgeHNpOnR5cGU9IkVMRU1FTlQiPgogICAgICAgICAgICAgICAgPG5hbWU+
+CiAgICAgICAgICAgICAgICAgIDx2YWx1ZT5BbmFseXRlIHJlc3VsdCBzdGF0dXMgdGltZXN0YW1w
+PC92YWx1ZT4KICAgICAgICAgICAgICAgIDwvbmFtZT4KICAgICAgICAgICAgICAgIDx2YWx1ZSB4
+c2k6dHlwZT0iRFZfREFURV9USU1FIj4KICAgICAgICAgICAgICAgICAgPHZhbHVlPjIwMTgwNzEy
+VDE4NTkxOCwyOTctMDMwMDwvdmFsdWU+CiAgICAgICAgICAgICAgICA8L3ZhbHVlPgogICAgICAg
+ICAgICAgIDwvaXRlbXM+CiAgICAgICAgICAgIDwvaXRlbXM+CiAgICAgICAgICA8L2RhdGE+CiAg
+ICAgICAgPC9ldmVudHM+CiAgICAgIDwvZGF0YT4KICAgIDwvY29udGVudD4KICA8L2RhdGE+CiAg
+PGxpZmVjeWNsZV9zdGF0ZT4KICAgIDx2YWx1ZT5jb21wbGV0ZTwvdmFsdWU+CiAgICA8ZGVmaW5p
+bmdfY29kZT4KICAgICAgPHRlcm1pbm9sb2d5X2lkPgogICAgICAgIDx2YWx1ZT5vcGVuZWhyPC92
+YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPjUzMjwvY29k
+ZV9zdHJpbmc+CiAgICA8L2RlZmluaW5nX2NvZGU+CiAgPC9saWZlY3ljbGVfc3RhdGU+CjwvdmVy
+c2lvbj4KPC92ZXJzaW9ucz4=</outboundTemplate>
+      <inboundDataType>HL7V3</inboundDataType>
+      <outboundDataType>XML</outboundDataType>
+      <inboundProperties class="com.mirth.connect.plugins.datatypes.hl7v3.HL7V3DataTypeProperties" version="3.5.2">
+        <serializationProperties class="com.mirth.connect.plugins.datatypes.hl7v3.HL7V3SerializationProperties" version="3.5.2">
+          <stripNamespaces>false</stripNamespaces>
+        </serializationProperties>
+        <batchProperties class="com.mirth.connect.plugins.datatypes.hl7v3.HL7V3BatchProperties" version="3.5.2">
+          <splitType>JavaScript</splitType>
+          <batchScript></batchScript>
+        </batchProperties>
+      </inboundProperties>
+      <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+        <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+          <stripNamespaces>false</stripNamespaces>
+        </serializationProperties>
+        <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+          <splitType>Element_Name</splitType>
+          <elementName></elementName>
+          <level>1</level>
+          <query></query>
+          <batchScript></batchScript>
+        </batchProperties>
+      </outboundProperties>
+    </transformer>
+    <filter version="3.5.2">
+      <elements/>
+    </filter>
+    <transportName>HTTP Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="3.5.2">
+      <metaDataId>1</metaDataId>
+      <name>Destination 1</name>
+      <properties class="com.mirth.connect.connectors.js.JavaScriptDispatcherProperties" version="3.5.2">
+        <pluginProperties/>
+        <destinationConnectorProperties version="3.5.2">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <script>logger.info(connectorMessage.getEncodedData());</script>
+      </properties>
+      <transformer version="3.5.2">
+        <elements/>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>false</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </transformer>
+      <responseTransformer version="3.5.2">
+        <elements/>
+        <inboundDataType>XML</inboundDataType>
+        <outboundDataType>XML</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </inboundProperties>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.xml.XMLDataTypeProperties" version="3.5.2">
+          <serializationProperties class="com.mirth.connect.plugins.datatypes.xml.XMLSerializationProperties" version="3.5.2">
+            <stripNamespaces>true</stripNamespaces>
+          </serializationProperties>
+          <batchProperties class="com.mirth.connect.plugins.datatypes.xml.XMLBatchProperties" version="3.5.2">
+            <splitType>Element_Name</splitType>
+            <elementName></elementName>
+            <level>1</level>
+            <query></query>
+            <batchScript></batchScript>
+          </batchProperties>
+        </outboundProperties>
+      </responseTransformer>
+      <filter version="3.5.2">
+        <elements/>
+      </filter>
+      <transportName>JavaScript Writer</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>// Modify the message variable below to pre process data
+return message;</preprocessingScript>
+  <postprocessingScript>// This script executes once after a message has been processed
+// Responses returned from here will be stored as &quot;Postprocessor&quot; in the response map
+return;</postprocessingScript>
+  <deployScript>// This script executes once when the channel is deployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</deployScript>
+  <undeployScript>// This script executes once when the channel is undeployed
+// You only have access to the globalMap and globalChannelMap here to persist data
+return;</undeployScript>
+  <properties version="3.5.2">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>false</storeAttachments>
+    <metaDataColumns>
+      <metaDataColumn>
+        <name>SOURCE</name>
+        <type>STRING</type>
+        <mappingName>mirth_source</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>TYPE</name>
+        <type>STRING</type>
+        <mappingName>mirth_type</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>VERSION</name>
+        <type>STRING</type>
+        <mappingName>mirth_version</mappingName>
+      </metaDataColumn>
+    </metaDataColumns>
+    <attachmentProperties version="3.5.2">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+    <resourceIds class="linked-hash-map">
+      <entry>
+        <string>Default Resource</string>
+        <string>[Default Resource]</string>
+      </entry>
+    </resourceIds>
+  </properties>
+  <exportData>
+    <metadata>
+      <enabled>true</enabled>
+      <lastModified>
+        <time>1531987904669</time>
+        <timezone>America/Montevideo</timezone>
+      </lastModified>
+      <pruningSettings>
+        <archiveEnabled>true</archiveEnabled>
+      </pruningSettings>
+    </metadata>
+  </exportData>
+</channel>

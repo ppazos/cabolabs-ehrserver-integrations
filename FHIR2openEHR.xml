@@ -3,7 +3,7 @@
   <nextMetaDataId>3</nextMetaDataId>
   <name>FHIR2openEHR</name>
   <description></description>
-  <revision>87</revision>
+  <revision>88</revision>
   <sourceConnector version="3.5.2">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -97,7 +97,6 @@ for (var i = 1; i &lt;= 3; i++)
    // should be the parent of the sibling to be added, and it&apos;s the
    // parent of the node to add the sibling after it
    analyte_cluster.parent().insertChildAfter(analyte_cluster, analyte_cluster.copy());
-
 }
 
 // the analyte node should have a total of 4 occurrences on the output
@@ -235,7 +234,7 @@ tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;protocol&a
           <name>Map COMPOSITION document</name>
           <sequenceNumber>4</sequenceNumber>
           <script>// Context start time, same as OBSERVATION time mapped before
-tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;start_time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;]
+tmp[&apos;version&apos;][&apos;data&apos;][&apos;context&apos;][&apos;start_time&apos;][&apos;value&apos;] = tmp[&apos;version&apos;][&apos;data&apos;][&apos;content&apos;][&apos;data&apos;][&apos;origin&apos;][&apos;value&apos;];
 
 // Other context report ID (is free text!)
 // nowhere to put the type/system = msg[&apos;identifier&apos;][0][&apos;system&apos;];
@@ -540,7 +539,7 @@ PGxpZmVjeWNsZV9zdGF0ZT4KICAgIDx2YWx1ZT5jb21wbGV0ZTwvdmFsdWU+CiAgICA8ZGVmaW5p
 bmdfY29kZT4KICAgICAgPHRlcm1pbm9sb2d5X2lkPgogICAgICAgIDx2YWx1ZT5vcGVuZWhyPC92
 YWx1ZT4KICAgICAgPC90ZXJtaW5vbG9neV9pZD4KICAgICAgPGNvZGVfc3RyaW5nPjUzMjwvY29k
 ZV9zdHJpbmc+CiAgICA8L2RlZmluaW5nX2NvZGU+CiAgPC9saWZlY3ljbGVfc3RhdGU+CjwvdmVy
-c2lvbj4KPC92ZXJzaW9ucz4K</outboundTemplate>
+c2lvbj4KPC92ZXJzaW9ucz4=</outboundTemplate>
       <inboundDataType>JSON</inboundDataType>
       <outboundDataType>XML</outboundDataType>
       <inboundProperties class="com.mirth.connect.plugins.datatypes.json.JSONDataTypeProperties" version="3.5.2">
@@ -1128,13 +1127,12 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1531536010977</time>
+        <time>1531987927310</time>
         <timezone>America/Montevideo</timezone>
       </lastModified>
       <pruningSettings>
         <archiveEnabled>true</archiveEnabled>
       </pruningSettings>
     </metadata>
-    <channelTags/>
   </exportData>
 </channel>
